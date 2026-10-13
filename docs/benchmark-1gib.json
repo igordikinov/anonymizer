@@ -1,0 +1,10 @@
+{
+  "input_bytes": 1073739425,
+  "rows": 306345,
+  "elapsed_seconds": 211.04,
+  "peak_rss_mib": 52.7,
+  "output_bytes": 69910868,
+  "preserved_fields_equal": true,
+  "workload": "repeated 3450-character free text, COPY, 5 fields; full import/validation/dump/inserts/csv",
+  "concurrent_work": "Windows EXE build and small test suite"
+}

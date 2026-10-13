@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+*.spec
+projects/
+input/
+output/
+*.sqlite*
+*.snpanon
+*.csv
+*.sql
+!tests/fixtures/**
+!resources/**
