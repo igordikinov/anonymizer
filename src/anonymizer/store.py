@@ -15,13 +15,11 @@ class Store:
         self.db.executescript("""
           CREATE TABLE rows (id INTEGER PRIMARY KEY, tid INTEGER NOT NULL, body TEXT NOT NULL);
           CREATE INDEX row_table ON rows(tid,id);
-          CREATE TABLE refvalues (tid INTEGER, col TEXT, old TEXT, new TEXT, PRIMARY KEY(tid,col,old)) WITHOUT ROWID;
-          CREATE INDEX ref_new ON refvalues(tid,col,new);
         """)
         self.model, self.tables, self.skipped = model, {}, {}
         self.count, self.batch, self.batch_bytes = 0, [], 0
 
-    def define(self, name, fields):
+    def define(self, name, fields, fk_groups=(), key_groups=()):
         identifiers = [*name, *(f["name"] for f in fields)]
         if any(not isinstance(n, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9$]{0,62}", n) for n in identifiers):
             raise AnonymizerError("Некорректное имя схемы, таблицы или колонки. Поддерживаются технические имена SNP.")
@@ -29,8 +27,73 @@ class Store:
             raise AnonymizerError("Пустой или повторяющийся список колонок в структуре.")
         if name in self.tables:
             raise AnonymizerError(f"Повторное CREATE TABLE: {name[1]}.")
+        groups = self._normalize_groups(name, fields, fk_groups)
+        keys = self._normalize_keys(name, fields, key_groups)
+        # Logical model grain: only flags that come from the YAML snapshot, before
+        # they merge with DDL PK/UK flags in enrich. sys_id is system identity:
+        # it is omitted from exports and never part of a validated key.
+        model_grain = [f["name"] for f in fields if f["name"] != "sys_id"
+                       and set((self.model.field(name[1], f["name"]) or {}).get("keys") or []) & {"BK", "PK", "UK"}]
+        if model_grain:
+            descriptor = {"columns": model_grain, "kind": "model_bk", "nulls": "distinct"}
+            if descriptor not in keys:
+                keys.append(descriptor)
         tid = len(self.tables) + 1
-        self.tables[name] = {"id": tid, "fields": [self.model.enrich(name[1], f) for f in fields], "rows": 0}
+        self.tables[name] = {"id": tid, "fields": [self.model.enrich(name[1], f) for f in fields], "rows": 0,
+                             "fk_groups": groups, "key_groups": keys}
+
+    @staticmethod
+    def _normalize_keys(name, fields, key_groups):
+        """Single writer contract for key groups; manifest input is untrusted."""
+        if not isinstance(key_groups, (list, tuple)):
+            raise AnonymizerError(f"Таблица {name[1]}: некорректная группа PK/UNIQUE.")
+        known = {f["name"] for f in fields}
+        groups = []
+        for group in key_groups:
+            if not isinstance(group, dict):
+                raise AnonymizerError(f"Таблица {name[1]}: некорректная группа PK/UNIQUE.")
+            columns = group.get("columns")
+            if (not isinstance(columns, list) or not columns
+                    or any(not isinstance(c, str) for c in columns)
+                    or len(set(columns)) != len(columns)
+                    or any(c not in known for c in columns)
+                    or group.get("kind") not in {"pk", "unique"}):
+                raise AnonymizerError(f"Таблица {name[1]}: некорректная группа PK/UNIQUE.")
+            nulls = group.get("nulls", "distinct")
+            if nulls not in {"distinct", "not distinct"}:
+                raise AnonymizerError(f"Таблица {name[1]}: некорректное уточнение NULLS.")
+            descriptor = {"columns": list(columns), "kind": group["kind"], "nulls": nulls}
+            if descriptor not in groups:
+                groups.append(descriptor)
+        return groups
+
+    @staticmethod
+    def _normalize_groups(name, fields, fk_groups):
+        """Single writer contract for the composite FK catalog; manifest input is untrusted."""
+        if not isinstance(fk_groups, (list, tuple)):
+            raise AnonymizerError(f"Таблица {name[1]}: некорректная группа FOREIGN KEY.")
+        known = {f["name"] for f in fields}
+        groups = []
+        for group in fk_groups:
+            if not isinstance(group, dict):
+                raise AnonymizerError(f"Таблица {name[1]}: некорректная группа FOREIGN KEY.")
+            columns, targets = group.get("columns"), group.get("target_columns")
+            if (not isinstance(columns, list) or not isinstance(targets, list) or not columns
+                    or len(columns) != len(targets)
+                    or any(not isinstance(c, str) for c in columns + targets)
+                    or len(set(columns)) != len(columns)
+                    or any(c not in known for c in columns)):
+                raise AnonymizerError(f"Таблица {name[1]}: некорректная группа FOREIGN KEY.")
+            target_name = (group.get("target_schema"), group.get("target_table"))
+            if any(not isinstance(n, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9$]{0,62}", n) for n in target_name):
+                raise AnonymizerError("Некорректное имя схемы, таблицы или колонки. Поддерживаются технические имена SNP.")
+            if group.get("match", "simple") != "simple":
+                raise AnonymizerError("MATCH FULL/PARTIAL не поддерживается; переизвлеките данные или уберите MATCH")
+            descriptor = {"columns": list(columns), "target_schema": target_name[0], "target_table": target_name[1],
+                          "target_columns": list(targets), "match": "simple"}
+            if descriptor not in groups:  # CREATE + ALTER can restate the same constraint
+                groups.append(descriptor)
+        return groups
 
     def columns(self, name):
         if name not in self.tables:

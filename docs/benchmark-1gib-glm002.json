@@ -1,0 +1,9 @@
+{
+  "input_bytes": 1073739425,
+  "rows": 306345,
+  "elapsed_seconds": 77.53,
+  "peak_rss_mib": 53.52,
+  "output_bytes": 69911022,
+  "preserved_fields_equal": true,
+  "workload": "repeated 3450-character free text, COPY, 5 fields; full import/validation/dump/inserts/csv"
+}

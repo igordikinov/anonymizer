@@ -61,8 +61,25 @@ class Exporter:
         self.csv_stream = csv_path.open("w", encoding="utf-8", newline="")
         self.csv_writer = csv.writer(self.csv_stream, lineterminator="\n")
         self.csv_writer.writerow([f["name"] for f in fields])
-        self.manifest["tables"].append({"schema": schema, "table": table_name, "file": f"{schema}/{table_name}.csv", "rows": table["rows"],
-                                        "fields": [{k: f[k] for k in ("name", "sql_type", "nullable")} for f in fields]})
+        entry = {"schema": schema, "table": table_name, "file": f"{schema}/{table_name}.csv", "rows": table["rows"],
+                 "fields": [{k: f[k] for k in ("name", "sql_type", "nullable")} for f in fields]}
+        # Targets outside the published set keep their original schema name; the
+        # group is unverifiable on re-import and must not leak that name.
+        groups = []
+        for group in table.get("fk_groups", ()):
+            target_schema = self.schema_names.get(group["target_schema"])
+            if target_schema:
+                groups.append({"columns": list(group["columns"]), "target_schema": target_schema,
+                               "target_table": group["target_table"], "target_columns": list(group["target_columns"])})
+        if groups:
+            entry["foreign_keys"] = groups
+        # The model grain is rebuilt from the snapshot on re-import; only exact
+        # DDL constraints are persisted.
+        keys = [{"columns": list(g["columns"]), "kind": g["kind"], "nulls": g["nulls"]}
+                for g in table.get("key_groups", ()) if g["kind"] != "model_bk"]
+        if keys:
+            entry["key_groups"] = keys
+        self.manifest["tables"].append(entry)
         self.chunk, self.chunk_size = [], 0
 
     def row(self, row):

@@ -43,7 +43,7 @@ def parse_csv(path, store, check=lambda: None, encoding="utf-8-sig", delimiter=N
                 raise AnonymizerError(f"CSV {entry['table']}: повторяющиеся колонки.")
             name = (entry["schema"], entry["table"])
             if manifest and entry.get("fields"):
-                store.define(name, entry["fields"])
+                store.define(name, entry["fields"], entry.get("foreign_keys", ()), entry.get("key_groups", ()))
             else:
                 # CSV has no physical DDL: build the complete selected model table.
                 store.define(name, store.model.fields(name[1]))

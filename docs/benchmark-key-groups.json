@@ -1,0 +1,25 @@
+{
+  "input_bytes": 567432149,
+  "rows": 1704000,
+  "elapsed_seconds": 272.92,
+  "peak_rss_mib": 63.62,
+  "output_bytes": 208928887,
+  "preserved_fields_equal": true,
+  "key_groups": [
+    {
+      "columns": [
+        "a"
+      ],
+      "extra_rows_before": 0,
+      "extra_rows_after": 0
+    },
+    {
+      "columns": [
+        "b"
+      ],
+      "extra_rows_before": 0,
+      "extra_rows_after": 0
+    }
+  ],
+  "workload": "single COPY, two independent unique varchar keys ~1704000 distinct values each, 300-char note; full import/per-group validation/dump/inserts/csv"
+}

@@ -271,7 +271,7 @@ def parse_sql(path: Path, store, check=lambda: None, encoding="utf-8-sig", progr
                     if lex.peek().is_("IF"):
                         expect(lex, "IF"); expect(lex, "NOT"); expect(lex, "EXISTS")
                     name = qualified(lex, schema)
-                    fields, constraints = [], []
+                    fields, constraints, fk_groups, key_groups = [], [], [], []
                     for group in comma_groups(lex):
                         if group[0].is_("CONSTRAINT") or group[0].is_("PRIMARY") or group[0].is_("UNIQUE") or group[0].is_("FOREIGN") or group[0].is_("CHECK"):
                             constraints.append(group)
@@ -283,11 +283,15 @@ def parse_sql(path: Path, store, check=lambda: None, encoding="utf-8-sig", progr
                                 break
                             type_tokens.append(token.value)
                         field = {"name": column, "sql_type": " ".join(type_tokens), "nullable": not any(group[i].is_("NOT") and group[i+1].is_("NULL") for i in range(len(group)-1))}
-                        apply_column_constraints(field, group, name[0], lex)
+                        key = apply_column_constraints(field, group, name[0], lex)
                         fields.append(field)
+                        if key:
+                            key_groups.append(key)
                     for constraint in constraints:
-                        apply_table_constraint(fields, constraint, name[0], lex)
-                    store.define(name, fields)
+                        fks, keys = apply_table_constraint(fields, constraint, name[0], lex)
+                        fk_groups.extend(fks)
+                        key_groups.extend(keys)
+                    store.define(name, fields, fk_groups, key_groups)
                 else:
                     store.skipped["create_" + kind.value] = store.skipped.get("create_" + kind.value, 0) + 1
                 skip_statement(lex)
@@ -365,12 +369,14 @@ def skip_statement(lexer, collect=False):
 
 
 def token_columns(tokens, start, lexer):
+    """Column list starting at '('; returns (columns, index of closing paren)."""
     if start >= len(tokens) or tokens[start].value != "(":
         lexer.fail("Неподдерживаемое описание ключа")
     columns = []
-    for token in tokens[start+1:]:
+    for pos in range(start + 1, len(tokens)):
+        token = tokens[pos]
         if token.value == ")":
-            return columns
+            return columns, pos
         if token.value != ",":
             if token.kind not in {"id", "quoted"}:
                 lexer.fail("Неподдерживаемый ключ")
@@ -385,48 +391,98 @@ def reference(tokens, schema, lexer):
     if pos < len(tokens) and tokens[pos].value == ".":
         schema, table = table, tokens[pos+1].value
         pos += 2
-    return schema, table, token_columns(tokens, pos, lexer)
+    columns, end = token_columns(tokens, pos, lexer)
+    # Tail options: ON DELETE/UPDATE, DEFERRABLE, NOT VALID are accepted and
+    # ignored; only MATCH participates in validation semantics.
+    for i in range(end + 1, len(tokens)):
+        if tokens[i].is_("MATCH"):
+            if i + 1 >= len(tokens) or tokens[i+1].value.lower() not in {"simple", "full", "partial"}:
+                lexer.fail("Неподдерживаемое уточнение MATCH")
+            if tokens[i+1].value.lower() != "simple":
+                lexer.fail("MATCH FULL/PARTIAL не поддерживается; переизвлеките данные или уберите MATCH")
+    return schema, table, columns
+
+
+def parse_nulls_tail(tokens, start, lexer):
+    """Positional scan of a key-constraint tail: NULLS [NOT] DISTINCT, INCLUDE."""
+    for i in range(start, len(tokens)):
+        if tokens[i].is_("NULLS"):
+            if i + 2 < len(tokens) and tokens[i+1].is_("NOT") and tokens[i+2].is_("DISTINCT"):
+                return "not distinct"
+            if i + 1 < len(tokens) and tokens[i+1].is_("DISTINCT"):
+                return "distinct"
+            lexer.fail("Неподдерживаемое уточнение NULLS")
+        if tokens[i].is_("INCLUDE"):
+            lexer.fail("UNIQUE INCLUDE не поддерживается; переизвлеките данные без INCLUDE")
+    return "distinct"
 
 
 def apply_column_constraints(field, tokens, schema, lexer):
-    if any(t.is_("PRIMARY") for t in tokens):
+    """Applies flags; returns a single-column key group descriptor or None.
+
+    A column can be both keyed and referencing (e.g. UNIQUE REFERENCES):
+    the reference is processed even when a key group is returned.
+    """
+    key = None
+    primary = next((i for i, t in enumerate(tokens) if t.is_("PRIMARY")), None)
+    unique = next((i for i, t in enumerate(tokens) if t.is_("UNIQUE")), None)
+    if primary is not None:
         field.update(keys=["PK"], source_pk=True, nullable=False)
-    elif any(t.is_("UNIQUE") for t in tokens):
+        if parse_nulls_tail(tokens, primary + 1, lexer) != "distinct":
+            lexer.fail("PRIMARY KEY не принимает NULLS NOT DISTINCT")
+        key = {"columns": [field["name"]], "kind": "pk", "nulls": "distinct"}
+    elif unique is not None:
         field.update(keys=["UK"])
+        key = {"columns": [field["name"]], "kind": "unique", "nulls": parse_nulls_tail(tokens, unique + 1, lexer)}
     if any(t.is_("REFERENCES") for t in tokens):
         target_schema, target_table, columns = reference(tokens, schema, lexer)
         if len(columns) != 1:
             lexer.fail("Неподдерживаемая ссылка колонки")
         field["fk"] = {"schema": target_schema, "table": target_table, "field": columns[0]}
+    return key
 
 
 def apply_table_constraint(fields, tokens, schema, lexer):
+    """Mutates field flags; returns (composite FK groups, key groups)."""
     if tokens and tokens[0].is_("CONSTRAINT"):
         tokens = tokens[2:]
     bycol = {f["name"]: f for f in fields}
     if not tokens:
-        return
+        return [], []
     if tokens[0].is_("CHECK"):
         # CHECK predicates can contain customer literals; export does not retain them.
-        return
+        return [], []
     if tokens[0].is_("PRIMARY") or tokens[0].is_("UNIQUE"):
         start = 2 if tokens[0].is_("PRIMARY") else 1
-        for col in token_columns(tokens, start, lexer):
+        columns, end = token_columns(tokens, start, lexer)
+        kind = "pk" if tokens[0].is_("PRIMARY") else "unique"
+        nulls = parse_nulls_tail(tokens, end + 1, lexer)
+        if kind == "pk" and nulls != "distinct":
+            lexer.fail("PRIMARY KEY не принимает NULLS NOT DISTINCT")
+        for col in columns:
             if col not in bycol:
                 lexer.fail("Ключ ссылается на отсутствующую колонку")
             f = bycol[col]
-            f["keys"] = sorted(set(f.get("keys", [])) | {"PK" if tokens[0].is_("PRIMARY") else "UK"})
-            if tokens[0].is_("PRIMARY"):
+            f["keys"] = sorted(set(f.get("keys", [])) | {kind.upper()})
+            if kind == "pk":
                 f.update(source_pk=True, nullable=False)
-    elif tokens[0].is_("FOREIGN"):
-        columns = token_columns(tokens, 2, lexer)
+        return [], [{"columns": columns, "kind": kind, "nulls": nulls}]
+    if tokens[0].is_("FOREIGN"):
+        columns = token_columns(tokens, 2, lexer)[0]
         target_schema, target_table, targets = reference(tokens, schema, lexer)
         if len(columns) != len(targets):
             lexer.fail("Несовпадающие колонки FOREIGN KEY")
         for col, key in zip(columns, targets):
             if col not in bycol:
                 lexer.fail("Ссылка на отсутствующую колонку")
-            bycol[col]["fk"] = {"schema": target_schema, "table": target_table, "field": key}
+            # A column keeps its own column-level REFERENCES; a table-level group
+            # must not silently replace it (both constraints coexist in PostgreSQL).
+            # enrich() pre-sets fk=None, so only a real reference blocks the write.
+            if not bycol[col].get("fk"):
+                bycol[col]["fk"] = {"schema": target_schema, "table": target_table, "field": key}
+        return [{"columns": columns, "target_schema": target_schema, "target_table": target_table,
+                 "target_columns": targets, "match": "simple"}], []
+    return [], []
 
 
 def alter_constraint(store, tokens, default_schema, lexer):
@@ -440,4 +496,11 @@ def alter_constraint(store, tokens, default_schema, lexer):
     if (schema, table) not in store.tables:
         return
     if pos < len(tokens) and tokens[pos].is_("ADD"):
-        apply_table_constraint(store.tables[(schema, table)]["fields"], tokens[pos+1:], schema, lexer)
+        table_entry = store.tables[(schema, table)]
+        fks, keys = apply_table_constraint(table_entry["fields"], tokens[pos+1:], schema, lexer)
+        for group in fks:
+            if group not in table_entry["fk_groups"]:
+                table_entry["fk_groups"].append(group)
+        for group in keys:
+            if group not in table_entry["key_groups"]:
+                table_entry["key_groups"].append(group)
