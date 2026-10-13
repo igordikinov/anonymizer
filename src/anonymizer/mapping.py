@@ -202,13 +202,20 @@ class Transformer:
     def json_transform(self, value, schema, table, column, key=None):
         technical_keys = {"qty", "quantity", "date", "cost", "price", "item", "loc", "res", "comp", "key", "value", "name", "description", "data", "values", "rows", "columns", "properties", "enabled", "version", "start", "end"}
         domain = f"{schema}:{table}.{column}:json"
+
+        def replaced(original, *args, **kwargs):
+            replacement = self.project.pseudonym(*args, **kwargs)
+            if replacement == original:
+                raise AnonymizerError(f"Таблица {table}, колонка {column}: сгенерированная замена JSON совпала с исходным текстом. Нужен другой проект.")
+            return replacement
+
         if isinstance(value, dict):
-            return {(k if k in technical_keys else self.project.pseudonym(domain + ":keys", k)): self.json_transform(v, schema, table, column, k) for k, v in value.items()}
+            return {(k if k in technical_keys else replaced(k, domain + ":keys", k)): self.json_transform(v, schema, table, column, k) for k, v in value.items()}
         if isinstance(value, list):
             return [self.json_transform(v, schema, table, column, key) for v in value]
         if isinstance(value, json_data.Number) or not isinstance(value, str) or not value or json_data.is_date(value):
             return value
         if key in {"item", "loc", "res", "comp"}:
             root = self.model.root(table, key)
-            return self.project.pseudonym(f"{schema}:{root[0]}.{root[1]}", value, root=root)
-        return self.project.pseudonym(domain + ":values", value, label="text")
+            return replaced(value, f"{schema}:{root[0]}.{root[1]}", value, root=root)
+        return replaced(value, domain + ":values", value, label="text")

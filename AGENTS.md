@@ -14,7 +14,7 @@
 - Контекст без истории чата: `docs/handoff-glm.md`; стартовое задание — `docs/start-glm.md`.
 - Переносимые канонические роли — `.agents/roles/`; способ запуска независимых контекстов зависит от оболочки. Самопроверку не выдавать за independent reviewer/verifier.
 - Старт: `tools/preflight.ps1` из корня; проверка read-only, не bootstrap. Не перезаписывать существующие venv/config/hooks.
-- Трекер пока отсутствует; `docs/tasks/GLM-*.md` — карточки передачи. Beads init/prime/reseed/sync автоматически не выполнять.
+- Трекер Beads инициализирован 13.10.2026 по решению пользователя (bd 1.2.2, Dolt embedded, префикс `anonymizer`); очередь — `bd ready`. История задач до трекера — в `docs/tasks/GLM-*.md` и отчётах; это карточки передачи, не статусы. Dolt sync/reseed без явного задания не выполнять.
 - Первая задача — GLM-001 (группы составных FK); GLM-002 (независимые PK/UNIQUE) — отдельный следующий этап.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:970c3bf2 -->
