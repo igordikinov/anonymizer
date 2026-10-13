@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "snp-anonymizer"
-version = "0.1.0"
-description = "Offline desktop anonymizer for In.Plan SNP datasets"
+version = "0.2.0"
+description = "Desktop anonymizer for In.Plan SNP datasets; optional load into a target PostgreSQL"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["psycopg2-binary>=2.9"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pyinstaller>=6", "psutil>=6", "pglast>=8"]

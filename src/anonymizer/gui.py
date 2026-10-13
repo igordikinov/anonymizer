@@ -10,7 +10,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from .errors import AnonymizerError, Cancelled
 from .mapping import INDUSTRIES
-from .pipeline import Options, run
+from .pipeline import Options, PgOptions, run
 
 
 class Application:
@@ -47,6 +47,10 @@ class Application:
         self.encoding = tk.StringVar(value="UTF-8")
         self.delimiter = tk.StringVar(value="Авто")
         self.schemas = tk.StringVar()
+        self.pg_enabled = tk.BooleanVar(value=False)
+        self.pg_host, self.pg_port = tk.StringVar(), tk.StringVar(value="5432")
+        self.pg_db, self.pg_user = tk.StringVar(), tk.StringVar()
+        self.pg_password, self.pg_schema = tk.StringVar(), tk.StringVar(value="public")
         self.status = tk.StringVar(value="Выберите SQL-файл или папку CSV")
         self.result = tk.StringVar(value="Будут созданы dump.sql, inserts.sql, csv/ и report.json")
         self.controls = []
@@ -72,7 +76,27 @@ class Application:
         entry.grid(row=4, column=1, sticky="ew", padx=(16, 0), pady=4)
         self.controls.append(entry)
         ttk.Label(card, text="Пусто — все схемы. Несколько схем — через запятую.", style="Card.TLabel").grid(row=5, column=1, sticky="w", padx=(16, 0))
-        ttk.Label(card, text="Количества, цены и даты сохраняются, включая JSON. Тексты и бизнес-коды заменяются.\nsys_id не выгружается. Никаких сетевых запросов.", style="Card.TLabel").grid(row=6, column=0, columnspan=2, sticky="w", pady=(12, 0))
+        ttk.Label(card, text="Количества, цены и даты сохраняются, включая JSON. Тексты и бизнес-коды заменяются.\nsys_id не выгружается.", style="Card.TLabel").grid(row=6, column=0, columnspan=2, sticky="w", pady=(12, 0))
+
+        card = self.card(outer, "3. Загрузка в PostgreSQL (необязательно)")
+        check = ttk.Checkbutton(card, text="После проверок загрузить датасет в базу (TRUNCATE таблиц датасета + COPY)", variable=self.pg_enabled, command=self.pg_toggle)
+        check.grid(row=1, column=0, columnspan=4, sticky="w", pady=(0, 6))
+        self.controls.append(check)
+        self.pg_frame = ttk.Frame(card, style="Card.TFrame")
+        self.pg_frame.grid(row=2, column=0, columnspan=4, sticky="ew")
+        self.pg_frame.columnconfigure(1, weight=1)
+        self.pg_frame.columnconfigure(3, weight=1)
+        pg_rows = [("Хост", self.pg_host, 0, 0), ("Порт", self.pg_port, 0, 2), ("База", self.pg_db, 1, 0),
+                   ("Пользователь", self.pg_user, 1, 2), ("Пароль", self.pg_password, 2, 0), ("Целевая схема", self.pg_schema, 2, 2)]
+        self.pg_entries = []
+        for row, (caption, variable, grid_row, grid_col) in enumerate(pg_rows):
+            ttk.Label(self.pg_frame, text=caption, style="Card.TLabel").grid(row=grid_row, column=grid_col, sticky="w", pady=3, padx=(0, 16 if grid_col == 0 else 0))
+            entry = ttk.Entry(self.pg_frame, textvariable=variable, show="*" if caption == "Пароль" else "")
+            entry.grid(row=grid_row, column=grid_col + 1, sticky="ew", pady=3, padx=(0, 18))
+            self.pg_entries.append(entry)
+            self.controls.append(entry)
+        ttk.Label(self.pg_frame, text="Таблицы датасета должны существовать в целевой схеме. Сбой — полный откат, база не меняется.\nПароль не сохраняется и не попадает в отчёт.", style="Card.TLabel").grid(row=3, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        self.pg_toggle()
 
         footer = ttk.Frame(outer)
         footer.pack(fill="x", pady=(4, 0))
@@ -149,15 +173,36 @@ class Application:
             else:
                 self.project.set(path)
 
+    def pg_toggle(self):
+        state = "normal" if self.pg_enabled.get() else "disabled"
+        for entry in self.pg_entries:
+            entry.configure(state=state)
+
+    def pg_options(self):
+        if not self.pg_enabled.get():
+            return None
+        if not all(v.get().strip() for v in [self.pg_host, self.pg_db, self.pg_user]):
+            messagebox.showerror("PostgreSQL", "Укажите хост, базу и пользователя для загрузки.")
+            raise ValueError("pg")
+        if not self.pg_port.get().strip().isdigit():
+            messagebox.showerror("PostgreSQL", "Порт должен быть числом.")
+            raise ValueError("pg")
+        return PgOptions(self.pg_host.get().strip(), int(self.pg_port.get()), self.pg_db.get().strip(),
+                         self.pg_user.get().strip(), self.pg_password.get(), self.pg_schema.get().strip() or "public")
+
     def start(self):
         if not all(v.get().strip() for v in [self.source, self.output, self.project]):
             messagebox.showerror("Параметры", "Выберите исходные данные, новую папку результата и файл проекта.")
             return
         industry = next(k for k, v in INDUSTRIES.items() if v["title"] == self.industry.get())
+        try:
+            pg = self.pg_options()
+        except ValueError:
+            return
         options = Options(Path(self.source.get()), Path(self.output.get()), Path(self.project.get()), industry,
                           "cp1251" if self.encoding.get() == "Windows-1251" else "utf-8-sig",
                           {"Авто": None, "Табуляция": "\t"}.get(self.delimiter.get(), self.delimiter.get()),
-                          tuple(s.strip() for s in self.schemas.get().split(",") if s.strip()))
+                          tuple(s.strip() for s in self.schemas.get().split(",") if s.strip()), "public", pg)
         self.running = True
         self.cancel.clear()
         self.start_button.configure(state="disabled")
@@ -165,7 +210,7 @@ class Application:
         self.open_button.configure(state="disabled")
         for control in self.controls:
             control.configure(state="disabled")
-        self.result.set("Обработка идёт локально. Исходные файлы сохраняются.")
+        self.result.set("Обработка идёт локально." + (" После проверок датасет будет загружен в PostgreSQL." if pg else " Исходные файлы сохраняются."))
 
         def progress(stage, amount, message):
             try:
@@ -188,7 +233,7 @@ class Application:
             kind, data = self.events.get_nowait()
             if kind == "progress":
                 stage, amount, message = data
-                base, scale = {"import": (0, 35), "transform": (35, 55), "validate": (90, 9), "done": (100, 0)}[stage]
+                base, scale = {"import": (0, 35), "transform": (35, 55), "validate": (90, 9), "pg": (95, 4), "done": (100, 0)}[stage]
                 self.bar["value"] = base + amount * scale
                 self.status.set(message)
             else:
@@ -197,10 +242,12 @@ class Application:
                 self.cancel_button.configure(state="disabled")
                 for control in self.controls:
                     control.configure(state="readonly" if isinstance(control, ttk.Combobox) else "normal")
+                self.pg_toggle()
                 if kind == "done":
                     self.status.set(f"Готово: {data['tables']} таблиц, {data['rows']:,} строк")
                     missing = sum(f.get("status") == "target_not_in_input" or f.get("missing_after", 0) > 0 for f in data["validation"]["foreign_keys"])
-                    self.result.set(f"Проверены доступные связи, бизнес-ключи и сохраняемые поля. Предупреждений по ссылкам: {missing}. Отчёт — report.json.")
+                    loaded = f" В PostgreSQL загружено строк: {data['pg_load']['rows']:,} (схема {data['pg_load']['schema']})." if "pg_load" in data else ""
+                    self.result.set(f"Проверены доступные связи, бизнес-ключи и сохраняемые поля. Предупреждений по ссылкам: {missing}.{loaded} Отчёт — report.json.")
                     self.open_button.configure(state="normal")
                 else:
                     self.status.set("Итоговый пакет не создан")

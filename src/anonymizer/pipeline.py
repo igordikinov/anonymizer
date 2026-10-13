@@ -14,9 +14,20 @@ from .errors import AnonymizerError, Cancelled
 from .exporters import Exporter
 from .mapping import Project, Transformer
 from .metadata import Model
+from .pg_loader import load as pg_load
 from .sql_reader import parse_sql
 from .store import Store
 from .validation import Validator
+
+
+@dataclass
+class PgOptions:
+    host: str
+    port: int
+    dbname: str
+    user: str
+    password: str
+    schema: str
 
 
 @dataclass
@@ -29,6 +40,7 @@ class Options:
     delimiter: str | None = None
     schemas: tuple[str, ...] = ()
     csv_schema: str = "public"
+    pg: PgOptions | None = None
 
 
 def run(options: Options, progress=lambda stage, amount, message: None, cancel: Event | None = None):
@@ -107,6 +119,13 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                       "privacy": "nontechnical text and JSON strings/keys pseudonymized; JSON numbers/dates preserved; project mappings excluded",
                       "fields": [{"schema": schema_names[name[0]], "table": name[1], "columns": [
                           {"name": f["name"], "rule": transformer.rule(name[1], f, name[0]), "type": f["sql_type"]} for f in table["fields"]]} for name, table in store.tables.items()]}
+            check()
+            if options.pg:
+                progress("pg", 0, "Загрузка в PostgreSQL")
+                report["pg_load"] = pg_load(store.tables, staging / "dump.sql", options.pg,
+                                            progress=lambda done: progress("pg", min(done / max(store.count, 1), 1), f"Загружено строк: {done:,}"),
+                                            check=check)
+                progress("pg", 1, f"Загружено строк: {report['pg_load']['rows']:,}")
             (staging / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
             check()
             store.close()
