@@ -260,6 +260,14 @@ def test_manifest_roundtrip_preserves_groups_and_old_manifest_stays_valid(tmp_pa
     store.close()
 
 
+def test_foreign_key_without_references_is_rejected_safely(tmp_path):
+    src = tmp_path / "source.sql"
+    src.write_text("CREATE TABLE public.t(a int, b int, FOREIGN KEY (a,b));", encoding="utf-8")
+    with pytest.raises(AnonymizerError, match="REFERENCES"):
+        run(Options(src, tmp_path / "out", tmp_path / "synthetic.snpanon"))
+    assert not (tmp_path / "out").exists()
+
+
 def test_dump_does_not_add_source_constraints_and_single_fk_shape_kept(tmp_path):
     src = tmp_path / "source.sql"
     src.write_text("""

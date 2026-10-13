@@ -385,7 +385,10 @@ def token_columns(tokens, start, lexer):
 
 
 def reference(tokens, schema, lexer):
-    pos = next(i for i, token in enumerate(tokens) if token.is_("REFERENCES")) + 1
+    pos = next((i for i, token in enumerate(tokens) if token.is_("REFERENCES")), None)
+    if pos is None:
+        lexer.fail("FOREIGN KEY без REFERENCES не поддерживается")
+    pos += 1
     table = tokens[pos].value
     pos += 1
     if pos < len(tokens) and tokens[pos].value == ".":
