@@ -10,7 +10,7 @@ from anonymizer import ds_tokens, gui
 
 CANONICAL_ZIP = Path(r"C:\Git\scg\In.Plan Design System.zip")
 VENDORED = ("colors.css", "typography.css", "spacing.css", "base.css", "fonts.css",
-            "header-logo-in.png", "logo-in.png")
+            "header-logo-in.png", "logo-in.png", "app-icon.png")
 
 
 def test_vendored_files_present_and_are_png():
@@ -21,6 +21,20 @@ def test_vendored_files_present_and_are_png():
         logo_bytes = files("anonymizer.resources").joinpath(f"ds/{logo}").read_bytes()
         assert logo_bytes.startswith(b"\x89PNG")
     assert not files("anonymizer.resources").joinpath("ds/header-logo.png").is_file()  # полный In PLAN не используется
+
+
+def test_app_icon_is_white_letters_on_dark_background(tk_root):
+    import tkinter as tk
+
+    icon = tk.PhotoImage(master=tk_root, file=str(files("anonymizer.resources").joinpath("ds/app-icon.png")))
+    assert icon.get(2, 2) == (0x1B, 0x1B, 0x1B)  # фон композиции — тёмный рельс DS
+    whites = sum(
+        1 for y in range(0, icon.height(), 4) for x in range(0, icon.width(), 4)
+        if icon.get(x, y) == (255, 255, 255)
+    )
+    assert whites > 0  # белые буквы In. присутствуют на тёмном фоне
+    ico = Path(__file__).parent.parent / "packaging" / "app-icon.ico"
+    assert ico.read_bytes()[:4] == b"\x00\x00\x01\x00"  # ICO magic
 
 
 def test_vendored_tokens_match_canonical_archive():

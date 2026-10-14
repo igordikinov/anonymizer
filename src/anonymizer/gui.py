@@ -71,7 +71,7 @@ class Application:
         style.configure("TCheckbutton", background=ds.BG_SURFACE, foreground=ds.CONTENT_PRIMARY, font=self.font_body)
         style.map("TCheckbutton", background=[("active", ds.BG_SURFACE)])
         try:
-            icon = tk.PhotoImage(file=Path(__file__).parent / "resources" / "ds" / "logo-in.png")
+            icon = tk.PhotoImage(file=Path(__file__).parent / "resources" / "ds" / "app-icon.png")
             self._logo = icon  # держим ссылку: Tk-изображения удаляются сборщиком
             root.iconphoto(True, icon)
         except tk.TclError:
