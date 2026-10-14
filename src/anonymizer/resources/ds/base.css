@@ -1,0 +1,15 @@
+/* Global element defaults for In.Plan surfaces */
+body{margin:0;font-family:var(--scp-font-display-font-family),sans-serif;color:var(--scp-content-primary);font-size:14px;line-height:20px}
+*{box-sizing:border-box}
+h1,h2{margin:0}
+button{border:none;font-family:inherit}
+input,textarea{font-family:var(--scp-font-display-font-family),sans-serif}
+a{color:var(--scp-link-text-color);text-decoration:underline}
+a:hover{text-decoration:none;color:var(--scp-link-text-color)}
+.material-icons{font-family:'Material Icons';font-weight:normal;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;-webkit-font-feature-settings:'liga';font-feature-settings:'liga';-webkit-font-smoothing:antialiased}
+.scp-title{font-weight:700;font-size:18px;line-height:28px}
+.scp-secondary-text{font-weight:400;font-size:12px;line-height:16px}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background-color:var(--scp-scrollbar-thumb-color);border-radius:8px;background-clip:padding-box}
+::-webkit-scrollbar-track{background-color:transparent}
+.secondary-section{background:var(--scp-background-secondary);padding:24px;border-radius:8px;overflow:auto}

@@ -1,0 +1,72 @@
+/* In.Plan typography tokens — Open Sans everywhere (scp-ui _variables.scss + _variables.light.scss) */
+:root{
+--scp-font-family:'Open Sans';--scp-font-families-open-sans:'Open Sans';--scp-font-display-font-family:'Open Sans';
+/* Weights */
+--scp-font-weight-light:300;--scp-font-weight-regular:400;--scp-font-weight-medium:500;--scp-font-weight-semi-bold:600;--scp-font-weight-bold:700;
+--scp-font-weights-open-regular:400;--scp-font-weights-open-semi-bold:600;--scp-font-weights-open-bold:700;
+/* Font sizes (px scale) */
+--scp-font-sizes-12:12px;--scp-font-sizes-14:14px;--scp-font-sizes-16:16px;--scp-font-sizes-18:18px;--scp-font-sizes-20:20px;--scp-font-sizes-22:22px;--scp-font-sizes-24:24px;--scp-font-sizes-26:26px;--scp-font-sizes-28:28px;--scp-font-sizes-32:32px;--scp-font-sizes-40:40px;--scp-font-sizes-48:48px;--scp-font-sizes-56:56px;
+/* Line heights */
+--scp-line-height-12:12px;--scp-line-height-16:16px;--scp-line-height-18:18px;--scp-line-height-20:20px;--scp-line-height-24:24px;--scp-line-height-26:26px;--scp-line-height-28:28px;--scp-line-height-30:30px;--scp-line-height-32:32px;--scp-line-height-34:34px;--scp-line-height-36:36px;--scp-line-height-40:40px;--scp-line-height-48:48px;--scp-line-height-54:54px;--scp-line-height-64:64px;
+/* Display (marketing / hero) */
+--scp-font-display-xl:700 56px/64px 'Open Sans';/* @kind font */
+--scp-font-display-l:700 48px/54px 'Open Sans';/* @kind font */
+--scp-font-display-m:700 40px/48px 'Open Sans';/* @kind font */
+--scp-font-display-s:700 32px/40px 'Open Sans';/* @kind font */
+
+/* Headings (product) */
+--scp-font-heading-h1:700 28px/36px 'Open Sans';/* @kind font */
+--scp-font-heading-h2:700 26px/34px 'Open Sans';/* @kind font */
+--scp-font-heading-h3:700 24px/32px 'Open Sans';/* @kind font */
+--scp-font-heading-h4:700 22px/30px 'Open Sans';/* @kind font */
+--scp-font-heading-h5:700 20px/30px 'Open Sans';/* @kind font */
+
+/* Body */
+--scp-font-body-xl:400 18px/26px 'Open Sans';/* @kind font */
+--scp-font-body-l:400 16px/26px 'Open Sans';/* @kind font */
+--scp-font-body-m:400 14px/18px 'Open Sans';/* @kind font */
+--scp-font-body-s:400 12px/16px 'Open Sans';/* @kind font */
+
+/* Legacy composite shorthands (weight size/line-height family) */
+--scp-h1-bold:700 52px/64px 'Open Sans';/* @kind font */
+--scp-h1-semibold:600 52px/64px 'Open Sans';/* @kind font */
+--scp-h1-regular:400 52px/64px 'Open Sans';/* @kind font */
+
+--scp-h2-bold:700 48px/60px 'Open Sans';/* @kind font */
+--scp-h2-semibold:600 48px/60px 'Open Sans';/* @kind font */
+--scp-h2-regular:400 48px/60px 'Open Sans';/* @kind font */
+
+--scp-h3-bold:700 40px/48px 'Open Sans';/* @kind font */
+--scp-h3-semibold:600 40px/48px 'Open Sans';/* @kind font */
+--scp-h3-regular:400 40px/48px 'Open Sans';/* @kind font */
+
+--scp-h4-bold:700 32px/40px 'Open Sans';/* @kind font */
+--scp-h4-semibold:600 32px/40px 'Open Sans';/* @kind font */
+--scp-h4-regular:400 32px/40px 'Open Sans';/* @kind font */
+
+--scp-h5-bold:700 24px/30px 'Open Sans';/* @kind font */
+--scp-h5-semibold:600 24px/30px 'Open Sans';/* @kind font */
+--scp-h5-regular:400 24px/30px 'Open Sans';/* @kind font */
+
+--scp-h6-bold:700 20px/28px 'Open Sans';/* @kind font */
+--scp-h6-semibold:600 20px/28px 'Open Sans';/* @kind font */
+--scp-h6-regular:400 20px/28px 'Open Sans';/* @kind font */
+
+--scp-h7-bold:700 18px/24px 'Open Sans';/* @kind font */
+--scp-h7-semibold:600 18px/24px 'Open Sans';/* @kind font */
+--scp-h7-regular:400 18px/24px 'Open Sans';/* @kind font */
+
+--scp-sm-bold:700 16px/24px 'Open Sans';/* @kind font */
+--scp-sm-semibold:600 16px/24px 'Open Sans';/* @kind font */
+--scp-sm-regular:400 16px/24px 'Open Sans';/* @kind font */
+
+--scp-body-bold:700 14px/20px 'Open Sans';/* @kind font */
+--scp-body-semibold:600 14px/20px 'Open Sans';/* @kind font */
+--scp-body-regular:400 14px/20px 'Open Sans';/* @kind font */
+
+--scp-xs-bold:700 12px/16px 'Open Sans';/* @kind font */
+--scp-xs-semibold:600 12px/16px 'Open Sans';/* @kind font */
+--scp-xs-regular:400 12px/16px 'Open Sans';/* @kind font */
+
+--scp-default-font-size:14px;
+}

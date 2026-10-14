@@ -1,0 +1,47 @@
+/* In.Plan (SCP) color tokens — extracted from scp-ui _variables.light.scss + light-theme.scss */
+:root{
+/* Brand (purple) scale */
+--scp-color-brand-50:#faf3ff;--scp-color-brand-100:#f4e3ff;--scp-color-brand-200:#eacdff;--scp-color-brand-300:#d899ff;--scp-color-brand-400:#c46cff;--scp-color-brand-500:#af35ff;--scp-color-brand-600:#9c0fff;--scp-color-brand-700:#9000ff;--scp-color-brand-800:#6f00ce;--scp-color-brand-900:#4f0096;--scp-color-brand-950:#410076;
+/* Neutral scale */
+--scp-color-neutral-0:#ffffff;--scp-color-neutral-50:#f5f6f8;--scp-color-neutral-100:#eaeaea;--scp-color-neutral-150:#dfdfe0;--scp-color-neutral-200:#d4d5d6;--scp-color-neutral-300:#bfbfc1;--scp-color-neutral-400:#a9aaad;--scp-color-neutral-500:#949598;--scp-color-neutral-600:#77787a;--scp-color-neutral-700:#5a5a5c;--scp-color-neutral-800:#3c3d3e;--scp-color-neutral-850:#2e2e2f;--scp-color-neutral-900:#1f1f20;--scp-color-neutral-950:#111111;--scp-color-neutral-1000:#020202;
+/* Error (red) scale */
+--scp-color-error-50:#fef2f2;--scp-color-error-100:#fee2e2;--scp-color-error-200:#fecaca;--scp-color-error-300:#fca5a5;--scp-color-error-400:#f77272;--scp-color-error-500:#ee4444;--scp-color-error-600:#db2727;--scp-color-error-700:#b81d1d;--scp-color-error-800:#981c1c;--scp-color-error-900:#7e1e1e;--scp-color-error-950:#450a0a;
+/* Warning (orange) scale */
+--scp-color-warning-50:#fff8ed;--scp-color-warning-100:#ffeed4;--scp-color-warning-200:#ffdaa8;--scp-color-warning-300:#ffbf71;--scp-color-warning-400:#ff9a3b;--scp-color-warning-500:#fe7a11;--scp-color-warning-600:#ef5f07;--scp-color-warning-700:#c64608;--scp-color-warning-800:#9d380f;--scp-color-warning-900:#7e3010;--scp-color-warning-950:#441506;
+/* Attention (green / success) scale */
+--scp-color-attention-50:#f0fdf4;--scp-color-attention-100:#dcfce6;--scp-color-attention-200:#cef2d8;--scp-color-attention-300:#87eea8;--scp-color-attention-400:#4bdd7b;--scp-color-attention-500:#22bb55;--scp-color-attention-600:#17a245;--scp-color-attention-700:#167f39;--scp-color-attention-800:#176431;--scp-color-attention-900:#15522b;--scp-color-attention-950:#052e15;
+/* Semantic: accent (brand purple, legacy runtime names) */
+--scp-accent-primary:#9000ff;--scp-accent-sub-primary:#af47ff;--scp-accent-secondary:#c57aff;--scp-accent-disabled:#d8cfde;--scp-accent-border:#e9ccff;--scp-accent-background:#f1e0ff;--scp-accent-hover:#7320d9;--scp-accent-active:#822be2;
+/* Semantic: content (text/graphics) */
+--scp-content-constant:#ffffff;--scp-content-primary:#212529;--scp-content-sub-primary:#444647;--scp-content-secondary:#adb0b4;--scp-content-primary-gray:#f5f5f5;--scp-content-border:#999c9f;--scp-content-disabled:#d9d9d9;--scp-content-hover:#efefef;--scp-content-background:#ebebeb;
+/* Semantic: system states */
+--scp-system-success-primary:#22bb55;--scp-system-success-background:#d2faef;--scp-system-error-primary:#f22a41;--scp-system-error-background:#ffd6db;--scp-system-warning-primary:#ff9a3b;--scp-system-warning-background:#fcf0d4;
+/* Semantic: backgrounds */
+--scp-background-primary:#ffffff;--scp-background-secondary:#f5f6f8;--scp-background-modal:#ffffff;--scp-background-disabled:#ebebeb;--scp-common-second-background:#f8f8f8;
+--scp-bg-surface:#ffffff;--scp-bg-canvas:#f5f6f8;--scp-bg-menu:#111111;--scp-bg-elevated:#ffffff;
+/* Action backgrounds (buttons) */
+--scp-background-action-brand-primary-default:#9000ff;--scp-background-action-brand-primary-hover:#6f00ce;--scp-background-action-brand-primary-active:#4f0096;--scp-background-action-brand-primary-disable:#f5f6f8;
+--scp-background-action-brand-secondary-default:#f5f6f8;--scp-background-action-brand-secondary-hover:#eaeaea;--scp-background-action-brand-secondary-active:#dfdfe0;--scp-background-action-brand-secondary-disable:#f5f6f8;
+--scp-background-action-brand-tertiary-default:#ffffff;--scp-background-action-brand-tertiary-hover:#faf3ff;--scp-background-action-brand-tertiary-active:#f4e3ff;--scp-background-action-brand-tertiary-disable:#f5f6f8;
+--scp-background-action-brand-ghost-default:#ffffff;--scp-background-action-brand-ghost-hover:#eaeaea;--scp-background-action-brand-ghost-active:#dfdfe0;--scp-background-action-brand-ghost-disable:#ffffff;
+--scp-background-action-brand-outline-default:#ffffff;--scp-background-action-brand-outline-hover:#faf3ff;--scp-background-action-brand-outline-active:#f4e3ff;--scp-background-action-brand-outline-disable:#ffffff;
+--scp-background-action-neutral-primary-default:#1f1f20;--scp-background-action-neutral-primary-hover:#3c3d3e;--scp-background-action-neutral-primary-active:#5a5a5c;--scp-background-action-neutral-primary-disable:#f5f6f8;
+--scp-background-action-neutral-secondary-default:#f5f6f8;--scp-background-action-neutral-secondary-hover:#eaeaea;--scp-background-action-neutral-secondary-active:#dfdfe0;--scp-background-action-neutral-secondary-disable:#f5f6f8;
+--scp-background-action-destructive-default:#ee4444;--scp-background-action-destructive-hover:#db2727;--scp-background-action-destructive-active:#b81d1d;--scp-background-action-destructive-disable:#f5f6f8;
+/* Text tokens */
+--scp-text-neutral-primary:#1f1f20;--scp-text-neutral-secondary:#949598;--scp-text-neutral-disable:#bfbfc1;--scp-text-neutral-tertiary:#ffffff;
+--scp-text-brand-primary:#9000ff;--scp-text-brand-secondary:#c46cff;--scp-text-brand-disable:#eacdff;
+/* Graphic tokens (icons, illustrations) */
+--scp-graphic-neutral-primary:#1f1f20;--scp-graphic-neutral-secondary:#949598;--scp-graphic-neutral-disable:#bfbfc1;--scp-graphic-neutral-tertiary:#ffffff;
+--scp-graphic-brand-primary:#9000ff;--scp-graphic-brand-secondary:#d899ff;--scp-graphic-brand-disable:#f4e3ff;
+--scp-graphic-error-primary:#ee4444;--scp-graphic-warning-primary:#ff9a3b;--scp-graphic-attention-primary:#22bb55;
+/* Border tokens */
+--scp-border-neutral-default:#949598;--scp-border-neutral-hover:#5a5a5c;--scp-border-neutral-active:#020202;--scp-border-neutral-disable:#eaeaea;--scp-border-neutral-tertiary:#eaeaea;
+--scp-border-brand-default:#9000ff;--scp-border-brand-hover:#6f00ce;--scp-border-brand-active:#4f0096;--scp-border-brand-disable:#eaeaea;
+--scp-border-error-default:#ee4444;--scp-border-warning-default:#ff9a3b;--scp-border-attention-default:#22bb55;
+--scp-neutral-default-border:#949598;
+/* Aliases used by scp-ui component styles */
+--scp-main-font-color:#000000;--scp-primary-color:#9000ff;--scp-active-btn-color:#9000ff;--scp-font-secondary-color:#adb0b4;
+--scp-table-border:#eff1f5;--scp-link-text-color:#0d56e2;
+--scp-content-bg:#ffffff;--scp-content-secondary-bg:#f5f6f8;
+}

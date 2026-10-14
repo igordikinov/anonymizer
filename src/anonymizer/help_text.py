@@ -4,6 +4,8 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
+from . import ds_tokens as ds
+
 HELP_TEXT = """НАЗНАЧЕНИЕ
 
 Приложение получает выгрузку данных In.Plan SNP (SQL-дамп; проверенный объём — около 1 ГиБ, или папка CSV) и готовит обезличенный набор: клиентские тексты и бизнес-коды заменяются на правдоподобные вымышленные, а количества, цены, даты и связи сохраняются. Установка и Python не требуются; файловый режим работает полностью offline.
@@ -62,17 +64,18 @@ def show_help(parent, version):
     window.geometry("760x580")
     window.minsize(560, 380)
     window.transient(parent)
-    frame = ttk.Frame(window, padding=12)
+    frame = ttk.Frame(window, padding=ds.SPACE_M)
     frame.pack(fill="both", expand=True)
-    text = tk.Text(frame, wrap="word", relief="flat", background="white", foreground="#20304b",
-                   font=("Segoe UI", 10), padx=12, pady=10, takefocus=0)
+    text = tk.Text(frame, wrap="word", relief="flat", background=ds.BG_SURFACE, foreground=ds.CONTENT_PRIMARY,
+                   font=(ds.FONT_FALLBACK, -14), padx=ds.SPACE_M, pady=10, takefocus=0)
     scroll = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
     text.configure(yscrollcommand=scroll.set)
     scroll.pack(side="right", fill="y")
     text.pack(side="left", fill="both", expand=True)
     text.insert("1.0", HELP_TEXT)
     text.configure(state="disabled")
-    ttk.Button(window, text="Закрыть", command=window.destroy).pack(pady=(0, 10))
+    close = ttk.Button(window, text="Закрыть", command=window.destroy, style="Primary.TButton")
+    close.pack(pady=(0, ds.SPACE_M))
     window.bind("<Escape>", lambda event: window.destroy())
     window.bind("<F1>", lambda event: show_help(parent, version))
     return window

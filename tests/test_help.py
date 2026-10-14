@@ -16,14 +16,9 @@ def test_help_has_no_placeholder_or_sample_values():
         assert forbidden not in HELP_TEXT, forbidden
 
 
-def test_window_title_carries_version():
-    import tkinter as tk
-
-    root = tk.Tk()
-    root.withdraw()
+def test_window_title_carries_version(tk_root):
+    window = show_help(tk_root, __version__)
     try:
-        window = show_help(root, __version__)
         assert window.title() == f"Справка — SNP Anonymizer {__version__}"
-        window.destroy()
     finally:
-        root.destroy()
+        window.destroy()

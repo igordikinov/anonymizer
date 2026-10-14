@@ -1,0 +1,15 @@
+/* In.Plan spacing / radius tokens */
+:root{
+/* Paddings (legacy names, used across scp-ui) */
+--scp-paddings-xs:4px;--scp-paddings-s:8px;--scp-paddings-m:12px;--scp-paddings-l:16px;--scp-paddings-xl:24px;--scp-paddings-xxl:32px;--scp-paddings-xxxl:40px;--scp-paddings-xxxxl:64px;
+/* Spacing (new token set) */
+--scp-spacing-xs:4px;--scp-spacing-sm:8px;--scp-spacing-md:12px;--scp-spacing-lg:16px;--scp-spacing-xl:20px;--scp-spacing-2xl:24px;--scp-spacing-3xl:32px;--scp-spacing-4xl:40px;--scp-spacing-5xl:48px;--scp-spacing-6xl:56px;
+/* Radii */
+--scp-border-radius-sm:4px;--scp-border-radius-md:8px;--scp-border-radius-lg:16px;--scp-border-radius-xl:24px;
+--scp-radius-button:4px;--scp-radius-modal:8px;
+--scp-default-horizontal-gap:8px;
+/* Opacity */
+--scp-opacity-low:0.1;/* @kind other */
+--scp-opacity-md:0.5;/* @kind other */
+--scp-opacity-high:0.9;/* @kind other */
+}

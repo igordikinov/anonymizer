@@ -4,11 +4,13 @@ import os
 import queue
 import threading
 import tkinter as tk
+import tkinter.font as tkfont
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from . import __version__
+from . import ds_tokens as ds
 from .errors import AnonymizerError, Cancelled
 from .help_text import show_help
 from .mapping import INDUSTRIES
@@ -22,27 +24,66 @@ class Application:
         root.title("SNP Anonymizer")
         root.geometry("1030x820")
         root.minsize(870, 640)
-        root.configure(bg="#f4f6fa")
+        root.configure(bg=ds.BG_CANVAS)
+        families = set(tkfont.families(root))
+        family = ds.FONT_FAMILY if ds.FONT_FAMILY in families else ds.FONT_FALLBACK
+        self.font_title = (family, -22, "bold")
+        self.font_heading = (family, -15, "bold")
+        self.font_body = (family, -14)
+        self.font_secondary = (family, -12)
+        self.font_button = (family, -14, "bold")
         style = ttk.Style(root)
         style.theme_use("clam")
-        style.configure("TFrame", background="#f4f6fa")
-        style.configure("Card.TFrame", background="white")
-        style.configure("TLabel", background="#f4f6fa", foreground="#20304b", font=("Segoe UI", 10))
-        style.configure("Card.TLabel", background="white")
-        style.configure("Title.TLabel", font=("Segoe UI", 23, "bold"))
-        style.configure("Sub.TLabel", foreground="#69758a")
-        style.configure("Heading.TLabel", background="white", font=("Segoe UI", 12, "bold"))
-        style.configure("TButton", font=("Segoe UI", 10), padding=(14, 8))
-        style.configure("Primary.TButton", background="#315ed0", foreground="white", font=("Segoe UI", 11, "bold"))
-        style.map("Primary.TButton", background=[("active", "#254bb0"), ("disabled", "#a8b4cf")])
-        style.configure("TEntry", padding=7, font=("Segoe UI", 10))
-        style.configure("TCombobox", padding=5)
-        style.configure("Horizontal.TProgressbar", background="#315ed0", troughcolor="#e5eaf3")
-        outer = ttk.Frame(root, padding=26)
+        # In.Plan Design System: canvas #f5f6f8, surface #ffffff, brand #9000ff.
+        style.configure("TFrame", background=ds.BG_CANVAS)
+        style.configure("Card.TFrame", background=ds.BG_SURFACE)
+        style.configure("TLabel", background=ds.BG_CANVAS, foreground=ds.CONTENT_PRIMARY, font=self.font_body)
+        style.configure("Card.TLabel", background=ds.BG_SURFACE, foreground=ds.CONTENT_PRIMARY)
+        style.configure("Title.TLabel", background=ds.BG_CANVAS, foreground=ds.CONTENT_PRIMARY, font=self.font_title)
+        style.configure("Sub.TLabel", background=ds.BG_CANVAS, foreground=ds.CONTENT_SECONDARY, font=self.font_secondary)
+        style.configure("Hint.TLabel", background=ds.BG_SURFACE, foreground=ds.CONTENT_SUB, font=self.font_secondary)
+        style.configure("Heading.TLabel", background=ds.BG_SURFACE, foreground=ds.CONTENT_PRIMARY, font=self.font_heading)
+        style.configure("TButton", background=ds.BG_SURFACE, foreground=ds.CONTENT_PRIMARY,
+                        font=self.font_body, padding=(ds.SPACE_L, ds.SPACE_S), borderwidth=0)
+        style.map("TButton",
+                  background=[("active", ds.BG_HOVER), ("pressed", ds.BG_DISABLED), ("disabled", ds.BG_DISABLED)],
+                  foreground=[("disabled", ds.CONTENT_DISABLED)])
+        style.configure("Primary.TButton", background=ds.BRAND_600, foreground=ds.CONTENT_ON_BRAND,
+                        font=self.font_button, padding=(ds.SPACE_L, ds.SPACE_M), borderwidth=0)
+        style.map("Primary.TButton",
+                  background=[("active", ds.BRAND_700), ("pressed", ds.BRAND_800),
+                              ("disabled", ds.ACCENT_DISABLED)],
+                  foreground=[("disabled", ds.BG_SURFACE)])
+        style.configure("TEntry", padding=7, font=self.font_body, fieldbackground=ds.BG_SURFACE,
+                        foreground=ds.CONTENT_PRIMARY, bordercolor=ds.BORDER_TERTIARY,
+                        lightcolor=ds.BORDER_TERTIARY, darkcolor=ds.BORDER_TERTIARY, insertcolor=ds.CONTENT_PRIMARY)
+        style.map("TEntry", bordercolor=[("focus", ds.BORDER_BRAND)],
+                  lightcolor=[("focus", ds.BORDER_BRAND)], darkcolor=[("focus", ds.BORDER_BRAND)])
+        style.configure("TCombobox", padding=5, font=self.font_body, fieldbackground=ds.BG_SURFACE,
+                        foreground=ds.CONTENT_PRIMARY, bordercolor=ds.BORDER_TERTIARY,
+                        lightcolor=ds.BORDER_TERTIARY, darkcolor=ds.BORDER_TERTIARY,
+                        arrowcolor=ds.CONTENT_SUB, selectbackground=ds.BRAND_600, selectforeground=ds.CONTENT_ON_BRAND)
+        style.map("TCombobox", fieldbackground=[("readonly", ds.BG_SURFACE)])
+        style.configure("Horizontal.TProgressbar", background=ds.BRAND_600, troughcolor=ds.BG_CANVAS,
+                        bordercolor=ds.BORDER_TERTIARY, lightcolor=ds.BRAND_600, darkcolor=ds.BRAND_600)
+        style.configure("Vertical.TScrollbar", background=ds.BG_CANVAS, troughcolor=ds.BG_SURFACE,
+                        bordercolor=ds.BG_SURFACE, arrowcolor=ds.CONTENT_SECONDARY)
+        style.configure("TCheckbutton", background=ds.BG_SURFACE, foreground=ds.CONTENT_PRIMARY, font=self.font_body)
+        style.map("TCheckbutton", background=[("active", ds.BG_SURFACE)])
+        try:
+            logo = tk.PhotoImage(file=Path(__file__).parent / "resources" / "ds" / "header-logo.png")
+            self._logo = logo  # держим ссылку: Tk-изображения удаляются сборщиком
+            root.iconphoto(True, logo)
+        except tk.TclError:
+            self._logo = None
+        outer = ttk.Frame(root, padding=ds.SPACE_XL)
         outer.pack(fill="both", expand=True)
+        if self._logo is not None:
+            tk.Label(outer, image=self._logo, bg=ds.BG_CANVAS).pack(side="left", padx=(0, ds.SPACE_M))
         ttk.Label(outer, text="SNP Anonymizer", style="Title.TLabel").pack(side="left")
         # Справка доступна и во время обработки, поэтому вне self.controls.
-        ttk.Button(outer, text="?", width=3, command=lambda: show_help(root, __version__)).pack(side="right")
+        self.help_button = ttk.Button(outer, text="?", width=3, command=lambda: show_help(root, __version__))
+        self.help_button.pack(side="right")
         root.bind("<F1>", lambda event: show_help(root, __version__))
         ttk.Label(outer, text="Клиентские данные → обезличенный набор для демо и анализа", style="Sub.TLabel").pack(anchor="w", pady=(4, 18))
         self.source = tk.StringVar()
@@ -77,7 +118,7 @@ class Application:
 
         # Карточки — в прокручиваемой зоне: при нехватке высоты окна контент
         # доступен колесом/скроллбаром, а кнопки остаются на месте.
-        canvas = tk.Canvas(outer, highlightthickness=0, background="#f4f6fa")
+        canvas = tk.Canvas(outer, highlightthickness=0, background=ds.BG_CANVAS)
         vscroll = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
         canvas.configure(yscrollcommand=vscroll.set)
         vscroll.pack(side="right", fill="y")
@@ -91,14 +132,14 @@ class Application:
         self.path_row(card, 1, "Исходные данные", self.source, self.pick_source, "SQL…", secondary=("CSV…", self.pick_csv))
         self.path_row(card, 2, "Папка результата", self.output, self.pick_output, "Выбрать…")
         self.path_row(card, 3, "Локальный проект", self.project, self.pick_project, "Открыть…", secondary=("Новый…", self.new_project))
-        ttk.Label(card, text="Проект содержит исходные значения и карту замен. Храните его отдельно от выдаваемого пакета.", style="Card.TLabel").grid(row=4, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        ttk.Label(card, text="Проект содержит исходные значения и карту замен. Храните его отдельно от выдаваемого пакета.", style="Hint.TLabel").grid(row=4, column=0, columnspan=4, sticky="w", pady=(8, 0))
         ttk.Label(card, text="Карта замен в Excel (необязательно)", style="Card.TLabel").grid(row=5, column=0, sticky="w", pady=4)
         entry = ttk.Entry(card, textvariable=self.mapping_xlsx)
         entry.grid(row=5, column=1, sticky="ew", padx=16, pady=4)
         control = ttk.Button(card, text="Файл…", command=self.pick_mapping)
         control.grid(row=5, column=2, columnspan=2, sticky="ew", padx=(6, 0), pady=4)
         self.controls.extend([entry, control])
-        ttk.Label(card, text="Файл содержит исходные значения: храните его отдельно, получателям данных не передавайте.", style="Card.TLabel").grid(row=6, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        ttk.Label(card, text="Файл содержит исходные значения: храните его отдельно, получателям данных не передавайте.", style="Hint.TLabel").grid(row=6, column=0, columnspan=4, sticky="w", pady=(8, 0))
 
         card = self.card(cards_holder, "2. Настройки обезличивания")
         for row, (caption, variable, values) in enumerate([
@@ -114,8 +155,8 @@ class Application:
         entry = ttk.Entry(card, textvariable=self.schemas)
         entry.grid(row=4, column=1, sticky="ew", padx=(16, 0), pady=4)
         self.controls.append(entry)
-        ttk.Label(card, text="Пусто — все схемы. Несколько схем — через запятую.", style="Card.TLabel").grid(row=5, column=1, sticky="w", padx=(16, 0))
-        ttk.Label(card, text="Количества, цены и даты сохраняются, включая JSON. Тексты и бизнес-коды заменяются.\nsys_id не выгружается.", style="Card.TLabel").grid(row=6, column=0, columnspan=2, sticky="w", pady=(12, 0))
+        ttk.Label(card, text="Пусто — все схемы. Несколько схем — через запятую.", style="Hint.TLabel").grid(row=5, column=1, sticky="w", padx=(16, 0))
+        ttk.Label(card, text="Количества, цены и даты сохраняются, включая JSON. Тексты и бизнес-коды заменяются.\nsys_id не выгружается.", style="Hint.TLabel").grid(row=6, column=0, columnspan=2, sticky="w", pady=(12, 0))
 
         card = self.card(cards_holder, "3. Загрузка в PostgreSQL (необязательно)")
         check = ttk.Checkbutton(card, text="После проверок загрузить датасет в базу (TRUNCATE таблиц датасета + COPY)", variable=self.pg_enabled, command=self.pg_toggle)
@@ -134,7 +175,7 @@ class Application:
             entry.grid(row=grid_row, column=grid_col + 1, sticky="ew", pady=3, padx=(0, 18))
             self.pg_entries.append(entry)
             self.controls.append(entry)
-        ttk.Label(self.pg_frame, text="Таблицы датасета должны существовать в целевой схеме. Сбой — полный откат, база не меняется.\nПароль не сохраняется и не попадает в отчёт.", style="Card.TLabel").grid(row=3, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        ttk.Label(self.pg_frame, text="Таблицы датасета должны существовать в целевой схеме. Сбой — полный откат, база не меняется.\nПароль не сохраняется и не попадает в отчёт.", style="Hint.TLabel").grid(row=3, column=0, columnspan=4, sticky="w", pady=(8, 0))
         self.pg_toggle()
 
         # Колесо мыши прокручивает зону карточек.
@@ -278,6 +319,12 @@ class Application:
         threading.Thread(target=worker, daemon=False).start()
 
     def poll(self):
+        try:
+            self._poll_once()
+        except tk.TclError:
+            return  # окно уже уничтожено; отложенный callback догонять нечего
+
+    def _poll_once(self):
         while not self.events.empty():
             kind, data = self.events.get_nowait()
             if kind == "progress":
