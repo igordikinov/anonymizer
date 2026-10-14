@@ -47,13 +47,15 @@ def parse_csv(path, store, check=lambda: None, encoding="utf-8-sig", delimiter=N
             else:
                 # CSV has no physical DDL: build the complete selected model table.
                 store.define(name, store.model.fields(name[1]))
-            store.ensure(name, header)
+            full_header = list(header)
+            header = store.ensure(name, header)
+            kept_indexes = [i for i, col in enumerate(full_header) if col in set(header)]
             for row in reader:
                 check()
-                if len(row) != len(header):
+                if len(row) != len(full_header):
                     raise AnonymizerError(f"CSV {entry['table']}, запись {reader.line_num}: неправильное число полей.")
                 # Explicit NULL token. Empty strings remain empty, including quoted ones.
                 values = [None if value == r"\N" else (value[1:] if manifest and value.startswith("\\\\") else value) for value in row]
-                store.add_row(name, header, values)
+                store.add_row(name, header, [values[i] for i in kept_indexes])
         done += file.stat().st_size
         progress(done)

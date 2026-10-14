@@ -297,11 +297,12 @@ def parse_sql(path: Path, store, check=lambda: None, encoding="utf-8-sig", progr
                 skip_statement(lex)
             elif t.is_("COPY"):
                 name = qualified(lex, schema)
-                columns = [g[0].value for g in comma_groups(lex)] if lex.peek().value == "(" else store.columns(name)
+                full_columns = [g[0].value for g in comma_groups(lex)] if lex.peek().value == "(" else store.columns(name)
                 expect(lex, "FROM"); expect(lex, "STDIN"); expect(lex, ";")
                 if reader.readline().strip():
                     lex.fail("Данные COPY должны начинаться со следующей строки")
-                store.ensure(name, columns)
+                columns = store.ensure(name, full_columns)
+                kept_indexes = [i for i, col in enumerate(full_columns) if col in set(columns)]
                 while True:
                     check()
                     line = reader.readline()
@@ -310,23 +311,25 @@ def parse_sql(path: Path, store, check=lambda: None, encoding="utf-8-sig", progr
                     if line.rstrip("\r\n") == "\\.":
                         break
                     raw = line.rstrip("\r\n").split("\t")
-                    if len(raw) != len(columns):
+                    if len(raw) != len(full_columns):
                         lex.fail("Число полей COPY не совпадает со списком колонок")
-                    store.add_row(name, columns, [None if v == r"\N" else decode_escape(v, reader.encoding) for v in raw])
+                    values = [None if raw[i] == r"\N" else decode_escape(raw[i], reader.encoding) for i in kept_indexes]
+                    store.add_row(name, columns, values)
                     if store.count % 1000 == 0:
                         progress(reader.read_bytes)
                 progress(reader.read_bytes)
             elif t.is_("INSERT"):
                 expect(lex, "INTO")
                 name = qualified(lex, schema)
-                columns = [g[0].value for g in comma_groups(lex)] if lex.peek().value == "(" else store.columns(name)
+                full_columns = [g[0].value for g in comma_groups(lex)] if lex.peek().value == "(" else store.columns(name)
                 expect(lex, "VALUES")
-                store.ensure(name, columns)
+                columns = store.ensure(name, full_columns)
+                kept_indexes = [i for i, col in enumerate(full_columns) if col in set(columns)]
                 while True:
                     row = [literal(g, lex) for g in comma_groups(lex)]
-                    if len(row) != len(columns):
+                    if len(row) != len(full_columns):
                         lex.fail("Число значений INSERT не совпадает с колонками")
-                    store.add_row(name, columns, row)
+                    store.add_row(name, columns, [row[i] for i in kept_indexes])
                     if store.count % 1000 == 0:
                         progress(reader.read_bytes)
                     if lex.peek().value == ",":

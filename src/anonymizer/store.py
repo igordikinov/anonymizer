@@ -17,6 +17,7 @@ class Store:
           CREATE INDEX row_table ON rows(tid,id);
         """)
         self.model, self.tables, self.skipped = model, {}, {}
+        self.dropped_columns: list[tuple[str, str]] = []
         self.count, self.batch, self.batch_bytes = 0, [], 0
 
     def define(self, name, fields, fk_groups=(), key_groups=()):
@@ -101,6 +102,13 @@ class Store:
         return [f["name"] for f in self.tables[name]["fields"]]
 
     def ensure(self, name, columns):
+        """Validates data columns against the table and returns the kept list.
+
+        Columns absent from the model/DDL are dropped (recorded in
+        dropped_columns, warned in the journal) — they are not published
+        because no anonymization rule exists for them. An empty intersection
+        means the data does not belong to this table and blocks processing.
+        """
         if not columns or len(set(columns)) != len(columns):
             raise AnonymizerError(f"Таблица {name[1]}: пустые или повторяющиеся колонки.")
         if name not in self.tables:
@@ -110,15 +118,20 @@ class Store:
                 if not field and col in {"sys_id", "change_author", "update_date_time"}:
                     field = {"name": col, "type": {"sys_id": "INTEGER", "change_author": "UUID", "update_date_time": "DATE_TIME"}[col], "nullable": True}
                 if not field:
-                    raise AnonymizerError(f"Таблица {name[1]}, колонка {col}: нет типа в модели. Нужен SQL с CREATE TABLE.")
+                    self.dropped_columns.append((f"{name[0]}.{name[1]}", col))
+                    continue
                 fields.append(field)
+            if not fields:
+                raise AnonymizerError(f"Таблица {name[1]}: ни одна колонка данных не совпала с моделью; данные не относятся к этой таблице.")
             self.define(name, fields)
         available = self.columns(name)
-        missing = [col for col in columns if col not in available]
-        if missing:
-            raise AnonymizerError(
-                f"Таблица {name[1]}: колонки данных отсутствуют в DDL/модели: {', '.join(missing)}. "
-                "Уберите их из выгрузки или проверьте, что она соответствует снимку модели In.Plan.")
+        kept = [col for col in columns if col in available]
+        for col in columns:
+            if col not in available:
+                self.dropped_columns.append((f"{name[0]}.{name[1]}", col))
+        if not kept:
+            raise AnonymizerError(f"Таблица {name[1]}: ни одна колонка данных не совпала с DDL/моделью; данные не относятся к этой таблице.")
+        return kept
 
     def add_row(self, name, columns, row):
         table = self.tables[name]

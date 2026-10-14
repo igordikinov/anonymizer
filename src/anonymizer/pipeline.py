@@ -113,6 +113,9 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
             if not store.tables or not store.count:
                 raise AnonymizerError("Не найдены строки таблиц для обезличивания.")
             log.add("info", "import", "imported", "", f"таблиц: {len(store.tables)}; строк: {store.count:,}")
+            for table, column in store.dropped_columns:
+                log.add("warning", "import", "unknown_column", f"{table}: {column}",
+                        "колонки нет в модели/DDL — колонка пропущена и не входит в выдачу")
             for skipped_kind, count in sorted(store.skipped.items()):
                 log.add("warning", "import", "skipped_sql", skipped_kind, f"конструкций пропущено: {count}")
             if any(not [f for f in t["fields"] if f["name"] != "sys_id"] for t in store.tables.values()):

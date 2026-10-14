@@ -141,24 +141,46 @@ def test_project_inside_output_rejected(tmp_path):
         run(Options(src, tmp_path / "out", tmp_path / "out/client.snpanon"))
 
 
-def test_unknown_csv_columns_require_model(tmp_path):
+def test_unknown_csv_columns_are_dropped_with_warning(tmp_path):
+    from anonymizer.runlog import RunLog
+
     src = tmp_path / "source"
     src.mkdir()
     (src / "item.csv").write_text("item,unknown_client_field\nSecretKey,SecretValue\n", encoding="utf-8")
-    with pytest.raises(AnonymizerError) as error:
-        run(Options(src, tmp_path / "out", tmp_path / "client.snpanon"))
-    assert "SecretValue" not in str(error.value)
+    log = RunLog()
+    report = run(Options(src, tmp_path / "out", tmp_path / "client.snpanon", log=log))
+    assert report["rows"] == 1
+    manifest = json.loads((tmp_path / "out/csv/manifest.json").read_text())
+    fields = [f["name"] for f in manifest["tables"][0]["fields"]]
+    assert "item" in fields and "unknown_client_field" not in fields
+    warnings = [e for e in log.entries if e[1] == "warning" and e[3] == "unknown_column"]
+    assert warnings and "unknown_client_field" in warnings[0][4]
+    dump = (tmp_path / "out/dump.sql").read_text(encoding="utf-8")
+    assert "SecretValue" not in dump  # необезличиваемая колонка не публикуется
 
 
-def test_missing_csv_columns_are_named_in_error(tmp_path):
+def test_all_unknown_columns_block(tmp_path):
     src = tmp_path / "source"
     src.mkdir()
-    (src / "item.csv").write_text("item,client_col_a,client_col_b\nSecretKey,1,2\n", encoding="utf-8")
-    with pytest.raises(AnonymizerError) as error:
+    (src / "item.csv").write_text("client_col_a,client_col_b\n1,2\n", encoding="utf-8")
+    with pytest.raises(AnonymizerError, match="ни одна колонка"):
         run(Options(src, tmp_path / "out", tmp_path / "client.snpanon"))
-    # Технические имена колонок называются, значения — нет.
-    assert "client_col_a, client_col_b" in str(error.value)
-    assert "SecretKey" not in str(error.value)
+    assert not (tmp_path / "out").exists()
+
+
+def test_sql_extra_column_is_dropped(tmp_path):
+    from anonymizer.runlog import RunLog
+
+    src = tmp_path / "source.sql"
+    src.write_text(
+        "CREATE TABLE public.item(item text PRIMARY KEY, note text);\n"
+        "INSERT INTO public.item(item, client_extra, note) VALUES ('SecretKey','ExtraValue','SecretNote');\n",
+        encoding="utf-8")
+    log = RunLog()
+    report = run(Options(src, tmp_path / "out", tmp_path / "client.snpanon", log=log))
+    assert report["rows"] == 1
+    warnings = [e for e in log.entries if e[1] == "warning" and e[3] == "unknown_column"]
+    assert warnings and "client_extra" in warnings[0][4]
 
 
 def test_industry_cannot_change_in_existing_project(tmp_path):
