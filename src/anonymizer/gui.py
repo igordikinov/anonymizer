@@ -8,7 +8,9 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+from . import __version__
 from .errors import AnonymizerError, Cancelled
+from .help_text import show_help
 from .mapping import INDUSTRIES
 from .pipeline import Options, PgOptions, run
 
@@ -38,7 +40,10 @@ class Application:
         style.configure("Horizontal.TProgressbar", background="#315ed0", troughcolor="#e5eaf3")
         outer = ttk.Frame(root, padding=26)
         outer.pack(fill="both", expand=True)
-        ttk.Label(outer, text="SNP Anonymizer", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(outer, text="SNP Anonymizer", style="Title.TLabel").pack(side="left")
+        # Справка доступна и во время обработки, поэтому вне self.controls.
+        ttk.Button(outer, text="?", width=3, command=lambda: show_help(root, __version__)).pack(side="right")
+        root.bind("<F1>", lambda event: show_help(root, __version__))
         ttk.Label(outer, text="Клиентские данные → обезличенный набор для демо и анализа", style="Sub.TLabel").pack(anchor="w", pady=(4, 18))
         self.source = tk.StringVar()
         self.output = tk.StringVar()
