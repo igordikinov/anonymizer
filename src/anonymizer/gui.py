@@ -27,48 +27,55 @@ class Application:
         root.configure(bg=ds.BG_CANVAS)
         families = set(tkfont.families(root))
         family = ds.FONT_FAMILY if ds.FONT_FAMILY in families else ds.FONT_FALLBACK
-        self.font_title = (family, -22, "bold")
+        self.font_caption = (family, ds.CAPTION_SIZE, "bold")
         self.font_heading = (family, -15, "bold")
         self.font_body = (family, -14)
         self.font_secondary = (family, -12)
         self.font_button = (family, -14, "bold")
         style = ttk.Style(root)
         style.theme_use("clam")
-        # In.Plan Design System: canvas #f5f6f8, surface #ffffff, brand #9000ff.
+        # In.Plan Design System (бандл фронта): Open Sans, бренд #9000ff,
+        # поверхности #ffffff/#f5f6f8, границы #eaeaea, фокус полей брендовый.
         style.configure("TFrame", background=ds.BG_CANVAS)
         style.configure("Card.TFrame", background=ds.BG_SURFACE)
-        style.configure("TLabel", background=ds.BG_CANVAS, foreground=ds.CONTENT_PRIMARY, font=self.font_body)
-        style.configure("Card.TLabel", background=ds.BG_SURFACE, foreground=ds.CONTENT_PRIMARY)
-        style.configure("Title.TLabel", background=ds.BG_CANVAS, foreground=ds.CONTENT_PRIMARY, font=self.font_title)
-        style.configure("Sub.TLabel", background=ds.BG_CANVAS, foreground=ds.CONTENT_SECONDARY, font=self.font_secondary)
-        style.configure("Hint.TLabel", background=ds.BG_SURFACE, foreground=ds.CONTENT_SUB, font=self.font_secondary)
-        style.configure("Heading.TLabel", background=ds.BG_SURFACE, foreground=ds.CONTENT_PRIMARY, font=self.font_heading)
-        style.configure("TButton", background=ds.BG_SURFACE, foreground=ds.CONTENT_PRIMARY,
+        style.configure("TLabel", background=ds.BG_CANVAS, foreground=ds.TEXT_PRIMARY, font=self.font_body)
+        style.configure("Card.TLabel", background=ds.BG_SURFACE, foreground=ds.TEXT_PRIMARY)
+        style.configure("Caption.TLabel", background=ds.RAIL, foreground=ds.TEXT_ON_BRAND, font=self.font_caption)
+        style.configure("Sub.TLabel", background=ds.BG_CANVAS, foreground=ds.TEXT_SECONDARY, font=self.font_secondary)
+        style.configure("Hint.TLabel", background=ds.BG_SURFACE, foreground=ds.TEXT_SUB, font=self.font_secondary)
+        style.configure("Heading.TLabel", background=ds.BG_SURFACE, foreground=ds.TEXT_PRIMARY, font=self.font_heading)
+        # Кнопки на белых карточках — brand-tertiary: белые, hover #faf3ff.
+        style.configure("TButton", background=ds.BG_SURFACE, foreground=ds.TEXT_PRIMARY,
                         font=self.font_body, padding=(ds.SPACE_L, ds.SPACE_S), borderwidth=0)
         style.map("TButton",
-                  background=[("active", ds.BG_HOVER), ("pressed", ds.BG_DISABLED), ("disabled", ds.BG_DISABLED)],
-                  foreground=[("disabled", ds.CONTENT_DISABLED)])
-        style.configure("Primary.TButton", background=ds.BRAND_600, foreground=ds.CONTENT_ON_BRAND,
+                  background=[("active", ds.BRAND_50), ("pressed", ds.BRAND_100), ("disabled", ds.BG_DISABLED)],
+                  foreground=[("disabled", ds.TEXT_DISABLED)])
+        # Кнопки на канве (футер) — brand-secondary: #f5f6f8, hover #eaeaea.
+        style.configure("Secondary.TButton", background=ds.BG_CANVAS, foreground=ds.TEXT_PRIMARY,
+                        font=self.font_body, padding=(ds.SPACE_L, ds.SPACE_S), borderwidth=0)
+        style.map("Secondary.TButton",
+                  background=[("active", ds.BG_HOVER), ("pressed", ds.BG_PRESSED), ("disabled", ds.BG_DISABLED)],
+                  foreground=[("disabled", ds.TEXT_DISABLED)])
+        style.configure("Primary.TButton", background=ds.BRAND_600, foreground=ds.TEXT_ON_BRAND,
                         font=self.font_button, padding=(ds.SPACE_L, ds.SPACE_M), borderwidth=0)
         style.map("Primary.TButton",
-                  background=[("active", ds.BRAND_700), ("pressed", ds.BRAND_800),
-                              ("disabled", ds.ACCENT_DISABLED)],
-                  foreground=[("disabled", ds.BG_SURFACE)])
+                  background=[("active", ds.BRAND_700), ("pressed", ds.BRAND_800), ("disabled", ds.BG_DISABLED)],
+                  foreground=[("disabled", ds.TEXT_DISABLED)])
         style.configure("TEntry", padding=7, font=self.font_body, fieldbackground=ds.BG_SURFACE,
-                        foreground=ds.CONTENT_PRIMARY, bordercolor=ds.BORDER_TERTIARY,
-                        lightcolor=ds.BORDER_TERTIARY, darkcolor=ds.BORDER_TERTIARY, insertcolor=ds.CONTENT_PRIMARY)
+                        foreground=ds.TEXT_PRIMARY, bordercolor=ds.BORDER_TERTIARY,
+                        lightcolor=ds.BORDER_TERTIARY, darkcolor=ds.BORDER_TERTIARY, insertcolor=ds.TEXT_PRIMARY)
         style.map("TEntry", bordercolor=[("focus", ds.BORDER_BRAND)],
                   lightcolor=[("focus", ds.BORDER_BRAND)], darkcolor=[("focus", ds.BORDER_BRAND)])
         style.configure("TCombobox", padding=5, font=self.font_body, fieldbackground=ds.BG_SURFACE,
-                        foreground=ds.CONTENT_PRIMARY, bordercolor=ds.BORDER_TERTIARY,
+                        foreground=ds.TEXT_PRIMARY, bordercolor=ds.BORDER_TERTIARY,
                         lightcolor=ds.BORDER_TERTIARY, darkcolor=ds.BORDER_TERTIARY,
-                        arrowcolor=ds.CONTENT_SUB, selectbackground=ds.BRAND_600, selectforeground=ds.CONTENT_ON_BRAND)
+                        arrowcolor=ds.TEXT_SECONDARY, selectbackground=ds.BRAND_600, selectforeground=ds.TEXT_ON_BRAND)
         style.map("TCombobox", fieldbackground=[("readonly", ds.BG_SURFACE)])
         style.configure("Horizontal.TProgressbar", background=ds.BRAND_600, troughcolor=ds.BG_CANVAS,
                         bordercolor=ds.BORDER_TERTIARY, lightcolor=ds.BRAND_600, darkcolor=ds.BRAND_600)
         style.configure("Vertical.TScrollbar", background=ds.BG_CANVAS, troughcolor=ds.BG_SURFACE,
-                        bordercolor=ds.BG_SURFACE, arrowcolor=ds.CONTENT_SECONDARY)
-        style.configure("TCheckbutton", background=ds.BG_SURFACE, foreground=ds.CONTENT_PRIMARY, font=self.font_body)
+                        bordercolor=ds.BG_SURFACE, arrowcolor=ds.TEXT_SECONDARY)
+        style.configure("TCheckbutton", background=ds.BG_SURFACE, foreground=ds.TEXT_PRIMARY, font=self.font_body)
         style.map("TCheckbutton", background=[("active", ds.BG_SURFACE)])
         try:
             icon = tk.PhotoImage(file=Path(__file__).parent / "resources" / "ds" / "app-icon.png")
@@ -76,24 +83,30 @@ class Application:
             root.iconphoto(True, icon)
         except tk.TclError:
             self._logo = None
-        # Чёрный рельс канонического scp-shell (sidebar--closed: 69px, #1b1b1b)
-        # с белой иконкой In.; контент — справа.
-        rail = tk.Frame(root, width=69, bg=ds.RAIL_BACKGROUND)
+        # Чёрная полоса сверху: надпись перенесена сюда, шрифт вдвое мельче титула.
+        bar = tk.Frame(root, height=44, bg=ds.RAIL)
+        bar.pack(side="top", fill="x")
+        bar.pack_propagate(False)
+        self.caption = tk.Label(bar, text="SNP Anonymizer", bg=ds.RAIL, fg=ds.TEXT_ON_BRAND,
+                                font=self.font_caption)
+        self.caption.pack(side="left", padx=ds.SPACE_XL)
+        # Тёмный рельс канонического scp-shell (sidebar--closed: 69px) с белой иконкой In.
+        rail = tk.Frame(root, width=69, bg=ds.RAIL)
         rail.pack(side="left", fill="y")
         rail.pack_propagate(False)
         try:
             in_logo = tk.PhotoImage(file=Path(__file__).parent / "resources" / "ds" / "header-logo-in.png")
             self._rail_logo = in_logo
-            self.rail_logo = tk.Label(rail, image=in_logo, bg=ds.RAIL_BACKGROUND)
+            self.rail_logo = tk.Label(rail, image=in_logo, bg=ds.RAIL)
             self.rail_logo.pack(anchor="nw", padx=15, pady=15)
         except tk.TclError:
             self.rail_logo = None
         self.rail = rail
         outer = ttk.Frame(root, padding=ds.SPACE_XL)
         outer.pack(side="left", fill="both", expand=True)
-        ttk.Label(outer, text="SNP Anonymizer", style="Title.TLabel").pack(side="left")
         # Справка доступна и во время обработки, поэтому вне self.controls.
-        self.help_button = ttk.Button(outer, text="?", width=3, command=lambda: show_help(root, __version__))
+        self.help_button = ttk.Button(outer, text="?", width=3, style="Secondary.TButton",
+                                      command=lambda: show_help(root, __version__))
         self.help_button.pack(side="right")
         root.bind("<F1>", lambda event: show_help(root, __version__))
         ttk.Label(outer, text="Клиентские данные → обезличенный набор для демо и анализа", style="Sub.TLabel").pack(anchor="w", pady=(4, 18))
@@ -122,9 +135,9 @@ class Application:
         footer.pack(side="bottom", fill="x", pady=(4, 0))
         self.start_button = ttk.Button(footer, text="Обезличить и экспортировать", style="Primary.TButton", command=self.start)
         self.start_button.pack(side="left")
-        self.cancel_button = ttk.Button(footer, text="Отмена", command=self.cancel.set, state="disabled")
+        self.cancel_button = ttk.Button(footer, text="Отмена", style="Secondary.TButton", command=self.cancel.set, state="disabled")
         self.cancel_button.pack(side="left", padx=10)
-        self.open_button = ttk.Button(footer, text="Открыть результат", command=self.open_result, state="disabled")
+        self.open_button = ttk.Button(footer, text="Открыть результат", style="Secondary.TButton", command=self.open_result, state="disabled")
         self.open_button.pack(side="right")
 
         # Карточки — в прокручиваемой зоне: при нехватке высоты окна контент

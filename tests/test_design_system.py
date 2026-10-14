@@ -48,11 +48,28 @@ def test_vendored_tokens_match_canonical_archive():
         assert vendored == canonical, name
 
 
-def test_palette_carries_inplan_brand():
+def test_palette_carries_inplan_product_canon():
+    # Канон продукта (scp-front/theme-source-old/core.json + вендор mrp-cockpit):
+    # Open Sans, accent.primary #9000ff, background #ffffff/#f5f6f8, content #212529.
     assert ds_tokens.BRAND_600 == "#9000ff"  # --scp-accent-primary
     assert ds_tokens.BRAND_700 == "#6f00ce" and ds_tokens.BRAND_800 == "#4f0096"
     assert ds_tokens.BG_CANVAS == "#f5f6f8" and ds_tokens.BG_SURFACE == "#ffffff"
-    assert ds_tokens.CONTENT_PRIMARY == "#212529" and ds_tokens.FONT_FAMILY == "Open Sans"
+    assert ds_tokens.TEXT_PRIMARY == "#212529"
+    assert ds_tokens.FONT_FAMILY == "Open Sans"
+    source = Path(gui.__file__).read_text(encoding="utf-8")
+    assert "Manrope" not in source  # Manrope — шрифт презентационного среза DS, не продукта
+
+
+def test_caption_moved_to_top_bar_with_halved_font(tk_root):
+    from anonymizer.gui import Application
+
+    for child in tk_root.winfo_children():
+        child.destroy()
+    app = Application(tk_root)
+    tk_root.update()
+    assert app.font_caption[1] == -11  # 22 / 2
+    assert app.caption.cget("text") == "SNP Anonymizer"
+    assert app.caption.cget("background") == ds_tokens.RAIL == "#1b1b1b"
 
 
 def test_gui_has_no_legacy_adhoc_colors():

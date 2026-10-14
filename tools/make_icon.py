@@ -37,7 +37,7 @@ for y in range(logo.height()):
             icon.put("#%02x%02x%02x" % (r, g, b), to=(ox + x, oy + y))
 icon.write(out_png, format="png")
 root.destroy()
-""".replace("{bg}", ds_tokens.RAIL_BACKGROUND)
+""".replace("{bg}", ds_tokens.RAIL)
 
 
 def main():

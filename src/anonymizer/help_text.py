@@ -66,7 +66,7 @@ def show_help(parent, version):
     window.transient(parent)
     frame = ttk.Frame(window, padding=ds.SPACE_M)
     frame.pack(fill="both", expand=True)
-    text = tk.Text(frame, wrap="word", relief="flat", background=ds.BG_SURFACE, foreground=ds.CONTENT_PRIMARY,
+    text = tk.Text(frame, wrap="word", relief="flat", background=ds.BG_SURFACE, foreground=ds.TEXT_PRIMARY,
                    font=(ds.FONT_FALLBACK, -14), padx=ds.SPACE_M, pady=10, takefocus=0)
     scroll = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
     text.configure(yscrollcommand=scroll.set)

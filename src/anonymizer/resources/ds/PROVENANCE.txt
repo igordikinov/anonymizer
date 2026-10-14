@@ -1,3 +1,4 @@
-Файлы извлечены из C:/Git/scg/In.Plan Design System.zip (tokens/*, assets/header-logo.png) 14.10.2026.
-Канонический источник дизайн-системы In.Plan; не редактировать руками - перегенерировать из архива.
-Те же токены вендорены в mrp-cockpit/web/src/styles/ds-tokens (CANONICAL In.Plan TOKENS).
+Токены (colors/typography/spacing/base/fonts.css) извлечены из C:/Git/scg/In.Plan Design System.zip — тот же бандл in-plan-design-system-0a4cef78, что вендорит фронтенд (mrp-cockpit/web/src/styles/ds-tokens, bom-screen). Канонический источник продукта: Open Sans, бренд #9000ff, поверхности #ffffff/#f5f6f8.
+Логотипы (header-logo-in.png, logo-in.png) — из того же архива (assets/*).
+Презентационная версия DS (C:/Git/snp-architecture/In.Plan Design System.zip, Manrope/чёрные слайды) — другой срез системы, для UI продукта не применяется.
+Не редактировать руками — перегенерировать из архива.
