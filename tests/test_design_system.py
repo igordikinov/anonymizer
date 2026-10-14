@@ -9,15 +9,18 @@ import pytest
 from anonymizer import ds_tokens, gui
 
 CANONICAL_ZIP = Path(r"C:\Git\scg\In.Plan Design System.zip")
-VENDORED = ("colors.css", "typography.css", "spacing.css", "base.css", "fonts.css", "header-logo.png")
+VENDORED = ("colors.css", "typography.css", "spacing.css", "base.css", "fonts.css",
+            "header-logo-in.png", "logo-in.png")
 
 
-def test_vendored_files_present_and_are_png_or_css():
+def test_vendored_files_present_and_are_png():
     for name in VENDORED:
         path = files("anonymizer.resources").joinpath(f"ds/{name}")
         assert path.is_file(), name
-    logo = files("anonymizer.resources").joinpath("ds/header-logo.png").read_bytes()
-    assert logo.startswith(b"\x89PNG")
+    for logo in ("header-logo-in.png", "logo-in.png"):
+        logo_bytes = files("anonymizer.resources").joinpath(f"ds/{logo}").read_bytes()
+        assert logo_bytes.startswith(b"\x89PNG")
+    assert not files("anonymizer.resources").joinpath("ds/header-logo.png").is_file()  # полный In PLAN не используется
 
 
 def test_vendored_tokens_match_canonical_archive():

@@ -22,6 +22,7 @@ BG_CANVAS = "#f5f6f8"       # --scp-bg-canvas / background-secondary
 BG_SURFACE = "#ffffff"      # cards, inputs
 BG_HOVER = "#eaeaea"        # secondary button hover
 BG_DISABLED = "#ebebeb"
+RAIL_BACKGROUND = "#1b1b1b"  # scp-shell sidebar--closed (тёмный рельс под белой иконкой In.)
 
 # Content (text)
 CONTENT_PRIMARY = "#212529"

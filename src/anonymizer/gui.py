@@ -71,15 +71,26 @@ class Application:
         style.configure("TCheckbutton", background=ds.BG_SURFACE, foreground=ds.CONTENT_PRIMARY, font=self.font_body)
         style.map("TCheckbutton", background=[("active", ds.BG_SURFACE)])
         try:
-            logo = tk.PhotoImage(file=Path(__file__).parent / "resources" / "ds" / "header-logo.png")
-            self._logo = logo  # держим ссылку: Tk-изображения удаляются сборщиком
-            root.iconphoto(True, logo)
+            icon = tk.PhotoImage(file=Path(__file__).parent / "resources" / "ds" / "logo-in.png")
+            self._logo = icon  # держим ссылку: Tk-изображения удаляются сборщиком
+            root.iconphoto(True, icon)
         except tk.TclError:
             self._logo = None
+        # Чёрный рельс канонического scp-shell (sidebar--closed: 69px, #1b1b1b)
+        # с белой иконкой In.; контент — справа.
+        rail = tk.Frame(root, width=69, bg=ds.RAIL_BACKGROUND)
+        rail.pack(side="left", fill="y")
+        rail.pack_propagate(False)
+        try:
+            in_logo = tk.PhotoImage(file=Path(__file__).parent / "resources" / "ds" / "header-logo-in.png")
+            self._rail_logo = in_logo
+            self.rail_logo = tk.Label(rail, image=in_logo, bg=ds.RAIL_BACKGROUND)
+            self.rail_logo.pack(anchor="nw", padx=15, pady=15)
+        except tk.TclError:
+            self.rail_logo = None
+        self.rail = rail
         outer = ttk.Frame(root, padding=ds.SPACE_XL)
-        outer.pack(fill="both", expand=True)
-        if self._logo is not None:
-            tk.Label(outer, image=self._logo, bg=ds.BG_CANVAS).pack(side="left", padx=(0, ds.SPACE_M))
+        outer.pack(side="left", fill="both", expand=True)
         ttk.Label(outer, text="SNP Anonymizer", style="Title.TLabel").pack(side="left")
         # Справка доступна и во время обработки, поэтому вне self.controls.
         self.help_button = ttk.Button(outer, text="?", width=3, command=lambda: show_help(root, __version__))
