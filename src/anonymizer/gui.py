@@ -156,7 +156,8 @@ class Application:
                 self.project.set(str(parent / "client.snpanon"))
 
     def pick_source(self):
-        self.select_source(filedialog.askopenfilename(filetypes=[("PostgreSQL SQL", "*.sql")]))
+        self.select_source(filedialog.askopenfilename(filetypes=[
+            ("Выгрузка данных", "*.sql *.zip"), ("ZIP-архив", "*.zip"), ("PostgreSQL SQL", "*.sql")]))
 
     def pick_csv(self):
         self.select_source(filedialog.askdirectory(title="Папка с CSV"))

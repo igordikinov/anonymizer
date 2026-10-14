@@ -19,6 +19,7 @@ from .pg_loader import load as pg_load
 from .sql_reader import parse_sql
 from .store import Store
 from .validation import Validator
+from .zip_input import extract_dataset
 
 
 @dataclass
@@ -48,8 +49,8 @@ class Options:
 
 def run(options: Options, progress=lambda stage, amount, message: None, cancel: Event | None = None):
     source, output, project_path = [p.resolve() for p in (options.source, options.output, options.project)]
-    if not source.exists() or (source.is_file() and source.suffix.lower() != ".sql"):
-        raise AnonymizerError("Источник должен быть файлом .sql или папкой CSV.")
+    if not source.exists() or (source.is_file() and source.suffix.lower() not in {".sql", ".zip"}):
+        raise AnonymizerError("Источник должен быть файлом .sql, ZIP-архивом или папкой CSV.")
     if output.exists():
         raise AnonymizerError("Папка результата уже существует. Выберите новую папку.")
     if output == source or (source.is_dir() and output.is_relative_to(source)):
@@ -78,13 +79,18 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
 
     try:
         with tempfile.TemporaryDirectory(prefix="snp-anonymizer-") as temp, Store(Path(temp) / "spool.sqlite", model) as store:
-            total = source.stat().st_size if source.is_file() else sum(p.stat().st_size for p in source.rglob("*.csv"))
+            data_source = source
+            if source.suffix.lower() == ".zip":
+                progress("import", 0, "Распаковка архива")
+                data_source = extract_dataset(source, Path(temp) / "zip", check,
+                                              progress=lambda done: progress("import", 0, f"Распаковка архива: {done:,} байт"))
+            total = data_source.stat().st_size if data_source.is_file() else sum(p.stat().st_size for p in data_source.rglob("*.csv"))
             progress("import", 0, "Чтение и проверка структуры")
             callback = lambda n: progress("import", min(n / max(total, 1), 1), "Чтение данных")
-            if source.is_file():
-                parse_sql(source, store, check, options.encoding, callback)
+            if data_source.is_file():
+                parse_sql(data_source, store, check, options.encoding, callback)
             else:
-                parse_csv(source, store, check, options.encoding, options.delimiter, options.csv_schema, callback)
+                parse_csv(data_source, store, check, options.encoding, options.delimiter, options.csv_schema, callback)
             store.flush()
             if options.schemas:
                 present = {name[0] for name in store.tables}
