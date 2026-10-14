@@ -150,6 +150,17 @@ def test_unknown_csv_columns_require_model(tmp_path):
     assert "SecretValue" not in str(error.value)
 
 
+def test_missing_csv_columns_are_named_in_error(tmp_path):
+    src = tmp_path / "source"
+    src.mkdir()
+    (src / "item.csv").write_text("item,client_col_a,client_col_b\nSecretKey,1,2\n", encoding="utf-8")
+    with pytest.raises(AnonymizerError) as error:
+        run(Options(src, tmp_path / "out", tmp_path / "client.snpanon"))
+    # Технические имена колонок называются, значения — нет.
+    assert "client_col_a, client_col_b" in str(error.value)
+    assert "SecretKey" not in str(error.value)
+
+
 def test_industry_cannot_change_in_existing_project(tmp_path):
     src = tmp_path / "source.sql"
     src.write_text(SQL, encoding="utf-8")

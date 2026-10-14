@@ -114,8 +114,11 @@ class Store:
                 fields.append(field)
             self.define(name, fields)
         available = self.columns(name)
-        if any(c not in available for c in columns):
-            raise AnonymizerError(f"Таблица {name[1]}: колонка данных отсутствует в DDL.")
+        missing = [col for col in columns if col not in available]
+        if missing:
+            raise AnonymizerError(
+                f"Таблица {name[1]}: колонки данных отсутствуют в DDL/модели: {', '.join(missing)}. "
+                "Уберите их из выгрузки или проверьте, что она соответствует снимку модели In.Plan.")
 
     def add_row(self, name, columns, row):
         table = self.tables[name]
