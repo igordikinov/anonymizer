@@ -45,23 +45,38 @@ class Application:
         style.configure("Sub.TLabel", background=ds.BG_CANVAS, foreground=ds.TEXT_SECONDARY, font=self.font_secondary)
         style.configure("Hint.TLabel", background=ds.BG_SURFACE, foreground=ds.TEXT_SUB, font=self.font_secondary)
         style.configure("Heading.TLabel", background=ds.BG_SURFACE, foreground=ds.TEXT_PRIMARY, font=self.font_heading)
-        # Кнопки на белых карточках — brand-tertiary: белые, hover #faf3ff.
-        style.configure("TButton", background=ds.BG_SURFACE, foreground=ds.TEXT_PRIMARY,
-                        font=self.font_body, padding=(ds.SPACE_L, ds.SPACE_S), borderwidth=0)
+        # Кнопки — stroked по scp-button фронта: белый фон, обводка #949598,
+        # текст чёрный; hover #f5f6f8, pressed #eaeaea. Видимы на любом фоне.
+        style.configure("TButton", background=ds.BG_SURFACE, foreground=ds.TEXT_HEADING,
+                        font=self.font_body, padding=(ds.SPACE_L, ds.SPACE_S),
+                        bordercolor=ds.BORDER_NEUTRAL, lightcolor=ds.BORDER_NEUTRAL,
+                        darkcolor=ds.BORDER_NEUTRAL, borderwidth=1)
         style.map("TButton",
-                  background=[("active", ds.BRAND_50), ("pressed", ds.BRAND_100), ("disabled", ds.BG_DISABLED)],
-                  foreground=[("disabled", ds.TEXT_DISABLED)])
-        # Кнопки на канве (футер) — brand-secondary: #f5f6f8, hover #eaeaea.
-        style.configure("Secondary.TButton", background=ds.BG_CANVAS, foreground=ds.TEXT_PRIMARY,
-                        font=self.font_body, padding=(ds.SPACE_L, ds.SPACE_S), borderwidth=0)
+                  background=[("active", ds.BG_CANVAS), ("pressed", ds.BG_HOVER), ("disabled", ds.BG_SURFACE)],
+                  foreground=[("disabled", ds.TEXT_DISABLED)],
+                  bordercolor=[("disabled", ds.BORDER_TERTIARY)],
+                  lightcolor=[("disabled", ds.BORDER_TERTIARY)],
+                  darkcolor=[("disabled", ds.BORDER_TERTIARY)])
+        style.configure("Secondary.TButton", background=ds.BG_SURFACE, foreground=ds.TEXT_HEADING,
+                        font=self.font_body, padding=(ds.SPACE_L, ds.SPACE_S),
+                        bordercolor=ds.BORDER_NEUTRAL, lightcolor=ds.BORDER_NEUTRAL,
+                        darkcolor=ds.BORDER_NEUTRAL, borderwidth=1)
         style.map("Secondary.TButton",
-                  background=[("active", ds.BG_HOVER), ("pressed", ds.BG_PRESSED), ("disabled", ds.BG_DISABLED)],
-                  foreground=[("disabled", ds.TEXT_DISABLED)])
-        style.configure("Primary.TButton", background=ds.BRAND_600, foreground=ds.TEXT_ON_BRAND,
-                        font=self.font_button, padding=(ds.SPACE_L, ds.SPACE_M), borderwidth=0)
+                  background=[("active", ds.BG_CANVAS), ("pressed", ds.BG_HOVER), ("disabled", ds.BG_SURFACE)],
+                  foreground=[("disabled", ds.TEXT_DISABLED)],
+                  bordercolor=[("disabled", ds.BORDER_TERTIARY)],
+                  lightcolor=[("disabled", ds.BORDER_TERTIARY)],
+                  darkcolor=[("disabled", ds.BORDER_TERTIARY)])
+        # Primary — .scp-btn продукта: заливка #9000ff, белый текст, вес bold, высота 40px.
+        style.configure("Primary.TButton", background=ds.BRAND, foreground=ds.TEXT_ON_BRAND,
+                        font=self.font_button, padding=(ds.SPACE_L, 10), borderwidth=0,
+                        bordercolor=ds.BRAND, lightcolor=ds.BRAND, darkcolor=ds.BRAND)
         style.map("Primary.TButton",
-                  background=[("active", ds.BRAND_700), ("pressed", ds.BRAND_800), ("disabled", ds.BG_DISABLED)],
-                  foreground=[("disabled", ds.TEXT_DISABLED)])
+                  background=[("active", ds.BRAND_HOVER), ("pressed", ds.BRAND_ACTIVE), ("disabled", ds.BG_DISABLED)],
+                  foreground=[("disabled", ds.TEXT_DISABLED)],
+                  bordercolor=[("active", ds.BRAND_HOVER), ("pressed", ds.BRAND_ACTIVE), ("disabled", ds.BORDER_TERTIARY)],
+                  lightcolor=[("active", ds.BRAND_HOVER), ("pressed", ds.BRAND_ACTIVE), ("disabled", ds.BORDER_TERTIARY)],
+                  darkcolor=[("active", ds.BRAND_HOVER), ("pressed", ds.BRAND_ACTIVE), ("disabled", ds.BORDER_TERTIARY)])
         style.configure("TEntry", padding=7, font=self.font_body, fieldbackground=ds.BG_SURFACE,
                         foreground=ds.TEXT_PRIMARY, bordercolor=ds.BORDER_TERTIARY,
                         lightcolor=ds.BORDER_TERTIARY, darkcolor=ds.BORDER_TERTIARY, insertcolor=ds.TEXT_PRIMARY)
@@ -85,12 +100,18 @@ class Application:
         except tk.TclError:
             self._logo = None
         # Чёрная полоса сверху: надпись перенесена сюда, шрифт вдвое мельче титула.
+        # Справка — заметная белая кнопка справа на чёрном; доступна и во время обработки.
         bar = tk.Frame(root, height=44, bg=ds.RAIL)
         bar.pack(side="top", fill="x")
         bar.pack_propagate(False)
         self.caption = tk.Label(bar, text="SNP Anonymizer", bg=ds.RAIL, fg=ds.TEXT_ON_BRAND,
                                 font=self.font_caption)
         self.caption.pack(side="left", padx=ds.SPACE_XL)
+        self.help_button = tk.Button(bar, text="?  Справка   F1", bg=ds.RAIL, fg=ds.TEXT_ON_BRAND,
+                                     activebackground=ds.HOVER_ON_DARK, activeforeground=ds.TEXT_ON_BRAND,
+                                     relief="flat", bd=0, font=self.font_secondary, cursor="hand2",
+                                     command=lambda: show_help(root, __version__))
+        self.help_button.pack(side="right", padx=ds.SPACE_L)
         # Тёмный рельс канонического scp-shell (sidebar--closed: 69px) с белой иконкой In.
         rail = tk.Frame(root, width=69, bg=ds.RAIL)
         rail.pack(side="left", fill="y")
@@ -105,10 +126,6 @@ class Application:
         self.rail = rail
         outer = ttk.Frame(root, padding=ds.SPACE_XL)
         outer.pack(side="left", fill="both", expand=True)
-        # Справка доступна и во время обработки, поэтому вне self.controls.
-        self.help_button = ttk.Button(outer, text="?", width=3, style="Secondary.TButton",
-                                      command=lambda: show_help(root, __version__))
-        self.help_button.pack(side="right")
         root.bind("<F1>", lambda event: show_help(root, __version__))
         ttk.Label(outer, text="Клиентские данные → обезличенный набор для демо и анализа", style="Sub.TLabel").pack(anchor="w", pady=(4, 18))
         self.source = tk.StringVar()

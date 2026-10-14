@@ -12,9 +12,13 @@ from __future__ import annotations
 BRAND_100 = "#f4e3ff"        # tertiary button pressed
 BRAND_50 = "#faf3ff"         # tertiary button hover
 BRAND_300 = "#d899ff"
-BRAND_600 = "#9000ff"        # --scp-accent-primary / primary button default
-BRAND_700 = "#6f00ce"        # primary hover
-BRAND_800 = "#4f0096"        # primary active
+BRAND = "#9000ff"            # --scp-accent-primary / --scp-background-action-brand-primary-default
+BRAND_HOVER = "#6f00ce"      # --scp-background-action-brand-primary-hover
+BRAND_ACTIVE = "#4f0096"     # --scp-background-action-brand-primary-active
+BRAND_300 = "#d899ff"
+BRAND_600 = BRAND
+BRAND_700 = BRAND_HOVER
+BRAND_800 = BRAND_ACTIVE
 ACCENT_DISABLED = "#d8cfde"
 
 # Surfaces — background-action-brand-* и background-primary/secondary
@@ -26,9 +30,11 @@ BG_PRESSED = "#dfdfe0"       # --scp-background-action-brand-secondary-active
 BG_DISABLED = "#f5f6f8"      # --scp-background-action-*-disable
 BAR = "#1b1b1b"              # scp-shell sidebar--closed / top bar (тёмный хром)
 RAIL = BAR
+HOVER_ON_DARK = "#404040"    # hover элементов на тёмном хроме
 
-# Content (text) — content-*
+# Content (text) — content-* и --scp-main-font-color
 TEXT_PRIMARY = "#212529"     # --scp-content-primary
+TEXT_HEADING = "#000000"     # --scp-main-font-color (лейблы кнопок stroked)
 TEXT_SUB = "#444647"         # hints on surface
 TEXT_SECONDARY = "#adb0b4"   # --scp-content-secondary
 TEXT_ON_BRAND = "#ffffff"    # --scp-content-constant
@@ -36,7 +42,7 @@ TEXT_DISABLED = "#d9d9d9"    # --scp-content-disabled
 
 # Borders — border-neutral-*
 BORDER_TERTIARY = "#eaeaea"  # --scp-border-neutral-tertiary (inputs, hairlines)
-BORDER_NEUTRAL = "#949598"   # --scp-border-neutral-default
+BORDER_NEUTRAL = "#949598"   # --scp-border-neutral-default (обводка stroked-кнопок)
 BORDER_BRAND = "#9000ff"     # focused control
 
 # System states — system-*

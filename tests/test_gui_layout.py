@@ -4,6 +4,9 @@ The footer is packed before the cards (bottom reserved); when the PostgreSQL
 fields are enabled the launch button must still be inside the visible window.
 Both tests attach to the shared session root (see conftest).
 """
+import tkinter as tk
+from tkinter import ttk
+
 import pytest
 
 from anonymizer.gui import Application
@@ -50,6 +53,25 @@ def test_dark_rail_with_in_icon(tk_root):
     assert rail.winfo_ismapped() and rail.winfo_width() == 69
     assert rail.cget("background") == "#1b1b1b"
     assert app.rail_logo.winfo_ismapped()  # только In., белый на чёрном
+
+
+def test_help_button_lives_in_dark_topbar(tk_root):
+    fresh_surface(tk_root)
+    app = Application(tk_root)
+    tk_root.update()
+    assert app.help_button.winfo_ismapped()
+    assert app.help_button.cget("background") == "#1b1b1b"
+    assert app.help_button.cget("foreground") == "#ffffff"  # белая на чёрной полосе — сразу видно
+    assert "Справка" in app.help_button.cget("text") and "F1" in app.help_button.cget("text")
+
+
+def test_buttons_follow_scp_button_canon(tk_root):
+    style = ttk.Style(tk_root)
+    # stroked: белый фон + обводка #949598 (видимый контур на любом фоне)
+    assert style.lookup("TButton", "background") == "#ffffff"
+    assert style.lookup("TButton", "bordercolor") == "#949598"
+    # primary: заливка #9000ff
+    assert style.lookup("Primary.TButton", "background") == "#9000ff"
 
 
 def test_journal_export_button(tmp_path, tk_root, monkeypatch):
