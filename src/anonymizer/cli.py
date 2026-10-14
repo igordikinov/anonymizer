@@ -25,6 +25,8 @@ def main(argv=None):
     parser.add_argument("--pg-user", help="Пользователь")
     parser.add_argument("--pg-password", default=None, help="Пароль; без флага запрашивается скрыто")
     parser.add_argument("--pg-schema", default="public", help="Целевая схема (создаётся при отсутствии)")
+    parser.add_argument("--mapping-xlsx", type=Path, default=None, help="Записать карту замен (что на что изменено) в отдельный Excel-файл; путь вне папки результата")
+    parser.add_argument("--mapping-xlsx-overwrite", action="store_true", help="Разрешить перезапись существующего файла карты")
     parser.add_argument("--smoke-gui", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if args.smoke_gui or not args.input:
@@ -43,7 +45,8 @@ def main(argv=None):
         parser.error("Флаги --pg-* требуют --pg-host; без него загрузка в PostgreSQL не выполняется")
     try:
         report = run(Options(args.input, args.output, args.project, args.industry, args.encoding,
-                             "\t" if args.delimiter == "tab" else args.delimiter, tuple(args.schema), args.csv_schema, pg))
+                             "\t" if args.delimiter == "tab" else args.delimiter, tuple(args.schema), args.csv_schema, pg,
+                             args.mapping_xlsx, args.mapping_xlsx_overwrite))
         summary = {"tables": report["tables"], "rows": report["rows"], "output": str(args.output)}
         if "pg_load" in report:
             summary["pg_load"] = report["pg_load"]

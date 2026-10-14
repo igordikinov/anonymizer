@@ -7,7 +7,7 @@ name = "snp-anonymizer"
 version = "0.2.0"
 description = "Desktop anonymizer for In.Plan SNP datasets; optional load into a target PostgreSQL"
 requires-python = ">=3.11"
-dependencies = ["psycopg2-binary>=2.9"]
+dependencies = ["psycopg2-binary>=2.9", "openpyxl>=3.1"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pyinstaller>=6", "psutil>=6", "pglast>=8"]

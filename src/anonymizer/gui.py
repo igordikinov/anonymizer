@@ -56,6 +56,7 @@ class Application:
         self.pg_host, self.pg_port = tk.StringVar(), tk.StringVar(value="5432")
         self.pg_db, self.pg_user = tk.StringVar(), tk.StringVar()
         self.pg_password, self.pg_schema = tk.StringVar(), tk.StringVar(value="public")
+        self.mapping_xlsx = tk.StringVar()
         self.status = tk.StringVar(value="Выберите SQL-файл или папку CSV")
         self.result = tk.StringVar(value="Будут созданы dump.sql, inserts.sql, csv/ и report.json")
         self.controls = []
@@ -65,6 +66,13 @@ class Application:
         self.path_row(card, 2, "Папка результата", self.output, self.pick_output, "Выбрать…")
         self.path_row(card, 3, "Локальный проект", self.project, self.pick_project, "Открыть…", secondary=("Новый…", self.new_project))
         ttk.Label(card, text="Проект содержит исходные значения и карту замен. Храните его отдельно от выдаваемого пакета.", style="Card.TLabel").grid(row=4, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        ttk.Label(card, text="Карта замен в Excel (необязательно)", style="Card.TLabel").grid(row=5, column=0, sticky="w", pady=4)
+        entry = ttk.Entry(card, textvariable=self.mapping_xlsx)
+        entry.grid(row=5, column=1, sticky="ew", padx=16, pady=4)
+        control = ttk.Button(card, text="Файл…", command=self.pick_mapping)
+        control.grid(row=5, column=2, columnspan=2, sticky="ew", padx=(6, 0), pady=4)
+        self.controls.extend([entry, control])
+        ttk.Label(card, text="Файл содержит исходные значения: храните его отдельно, получателям данных не передавайте.", style="Card.TLabel").grid(row=6, column=0, columnspan=4, sticky="w", pady=(8, 0))
 
         card = self.card(outer, "2. Настройки обезличивания")
         for row, (caption, variable, values) in enumerate([
@@ -178,6 +186,11 @@ class Application:
             else:
                 self.project.set(path)
 
+    def pick_mapping(self):
+        path = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Книга Excel", "*.xlsx")])
+        if path:
+            self.mapping_xlsx.set(path)
+
     def pg_toggle(self):
         state = "normal" if self.pg_enabled.get() else "disabled"
         for entry in self.pg_entries:
@@ -207,7 +220,8 @@ class Application:
         options = Options(Path(self.source.get()), Path(self.output.get()), Path(self.project.get()), industry,
                           "cp1251" if self.encoding.get() == "Windows-1251" else "utf-8-sig",
                           {"Авто": None, "Табуляция": "\t"}.get(self.delimiter.get(), self.delimiter.get()),
-                          tuple(s.strip() for s in self.schemas.get().split(",") if s.strip()), "public", pg)
+                          tuple(s.strip() for s in self.schemas.get().split(",") if s.strip()), "public", pg,
+                          Path(self.mapping_xlsx.get()) if self.mapping_xlsx.get().strip() else None, True)
         self.running = True
         self.cancel.clear()
         self.start_button.configure(state="disabled")
@@ -238,7 +252,7 @@ class Application:
             kind, data = self.events.get_nowait()
             if kind == "progress":
                 stage, amount, message = data
-                base, scale = {"import": (0, 35), "transform": (35, 55), "validate": (90, 9), "pg": (95, 4), "done": (100, 0)}[stage]
+                base, scale = {"import": (0, 35), "transform": (35, 55), "validate": (90, 9), "pg": (95, 4), "mapping": (99, 1), "done": (100, 0)}[stage]
                 self.bar["value"] = base + amount * scale
                 self.status.set(message)
             else:

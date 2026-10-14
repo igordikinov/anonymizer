@@ -13,6 +13,7 @@ from .csv_reader import parse_csv
 from .errors import AnonymizerError, Cancelled
 from .exporters import Exporter
 from .mapping import Project, Transformer
+from .mapping_export import write_mapping_xlsx
 from .metadata import Model
 from .pg_loader import load as pg_load
 from .sql_reader import parse_sql
@@ -41,6 +42,8 @@ class Options:
     schemas: tuple[str, ...] = ()
     csv_schema: str = "public"
     pg: PgOptions | None = None
+    mapping_xlsx: Path | None = None
+    mapping_overwrite: bool = False
 
 
 def run(options: Options, progress=lambda stage, amount, message: None, cancel: Event | None = None):
@@ -55,6 +58,14 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
         raise AnonymizerError("Локальный проект с исходными значениями должен храниться отдельно от входа и результата.")
     if project_path.suffix != ".snpanon":
         raise AnonymizerError("Файл проекта должен иметь расширение .snpanon.")
+    if options.mapping_xlsx is not None:
+        mapping_path = options.mapping_xlsx.resolve()
+        if not options.mapping_overwrite and mapping_path.exists():
+            raise AnonymizerError("Файл карты замен уже существует. Выберите другое имя или разрешите замену.")
+        if mapping_path in {project_path, source.resolve()} or (source.is_file() and mapping_path == source.resolve()):
+            raise AnonymizerError("Файл карты замен не может совпадать с проектом или исходным файлом: карта содержит исходные значения и пишется поверх живой базы проекта.")
+        if mapping_path == output or mapping_path.is_relative_to(output) or (source.is_dir() and mapping_path.is_relative_to(source)):
+            raise AnonymizerError("Файл карты замен содержит исходные значения и должен находиться вне папки результата и исходных данных.")
     model = Model()
     project, store, exporter = None, None, None
     success = False
@@ -126,6 +137,18 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                                             progress=lambda done: progress("pg", min(done / max(store.count, 1), 1), f"Загружено строк: {done:,}"),
                                             check=check)
                 progress("pg", 1, f"Загружено строк: {report['pg_load']['rows']:,}")
+            check()
+            if options.mapping_xlsx:
+                progress("mapping", 0, "Запись карты замен в Excel")
+
+                def mapping_rows():
+                    for domain, old, new in project.iter_mapping():
+                        # The published schema name is the raw replacement plus
+                        # the snp_ prefix; the map shows what the output contains.
+                        yield (domain, old, "snp_" + str(new).lower()) if domain == "schema" else (domain, old, new)
+
+                write_mapping_xlsx(options.mapping_xlsx, mapping_rows(), check=check)
+                progress("mapping", 1, "Карта замен записана")
             (staging / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
             check()
             store.close()

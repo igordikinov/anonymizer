@@ -113,6 +113,18 @@ class Project:
         prefix = {"loc": "Площадка Север", "res": "Линия производства", "prodsource_sp": "Технологический маршрут", "demand_stream": "Канал Регион", "brand": "Марка Альта", "category": "Группа продукции", "supplier": "Поставщик Вектор", "planner": "Планировщик", "address": "Улица Промышленная", "text": "Атрибут"}.get(kind, "Атрибут")
         return f"{prefix} {n:04d}"
 
+    def iter_mapping(self):
+        """Streams (domain, old, new) rows in batches; uncommitted data included."""
+        cursor = self.db.execute("SELECT domain, old, new FROM mapping ORDER BY domain, ordinal")
+        try:
+            while True:
+                batch = cursor.fetchmany(1000)
+                if not batch:
+                    break
+                yield from batch
+        finally:
+            cursor.close()
+
     def finish(self, success):
         if success:
             self.db.commit()
