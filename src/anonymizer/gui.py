@@ -15,6 +15,7 @@ from .errors import AnonymizerError, Cancelled
 from .help_text import show_help
 from .mapping import INDUSTRIES
 from .pipeline import Options, PgOptions, run
+from .runlog import RunLog
 
 
 class Application:
@@ -122,6 +123,7 @@ class Application:
         self.pg_db, self.pg_user = tk.StringVar(), tk.StringVar()
         self.pg_password, self.pg_schema = tk.StringVar(), tk.StringVar(value="public")
         self.mapping_xlsx = tk.StringVar()
+        self.runlog = RunLog()
         self.status = tk.StringVar(value="Выберите SQL-файл или папку CSV")
         self.result = tk.StringVar(value="Будут созданы dump.sql, inserts.sql, csv/ и report.json")
         self.controls = []
@@ -139,6 +141,8 @@ class Application:
         self.cancel_button.pack(side="left", padx=10)
         self.open_button = ttk.Button(footer, text="Открыть результат", style="Secondary.TButton", command=self.open_result, state="disabled")
         self.open_button.pack(side="right")
+        self.export_button = ttk.Button(footer, text="Выгрузить журнал (CSV)", style="Secondary.TButton", command=self.export_log, state="disabled")
+        self.export_button.pack(side="right", padx=(0, 10))
 
         # Карточки — в прокручиваемой зоне: при нехватке высоты окна контент
         # доступен колесом/скроллбаром, а кнопки остаются на месте.
@@ -281,6 +285,16 @@ class Application:
         if path:
             self.mapping_xlsx.set(path)
 
+    def export_log(self):
+        path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV", "*.csv")])
+        if not path:
+            return
+        try:
+            written = self.runlog.write_csv(path)
+            messagebox.showinfo("Журнал", f"Записано записей: {written}.")
+        except (OSError, ValueError) as error:
+            messagebox.showerror("Журнал", f"Не удалось записать файл ({type(error).__name__}).")
+
     def pg_toggle(self):
         state = "normal" if self.pg_enabled.get() else "disabled"
         for entry in self.pg_entries:
@@ -312,16 +326,19 @@ class Application:
             pg = self.pg_options()
         except ValueError:
             return
+        self.runlog = RunLog()
         options = Options(Path(self.source.get()), Path(self.output.get()), Path(self.project.get()), industry,
                           "cp1251" if self.encoding.get() == "Windows-1251" else "utf-8-sig",
                           {"Авто": None, "Табуляция": "\t"}.get(self.delimiter.get(), self.delimiter.get()),
                           tuple(s.strip() for s in self.schemas.get().split(",") if s.strip()), "public", pg,
-                          Path(self.mapping_xlsx.get()) if self.mapping_xlsx.get().strip() else None, True)
+                          Path(self.mapping_xlsx.get()) if self.mapping_xlsx.get().strip() else None, True,
+                          self.runlog)
         self.running = True
         self.cancel.clear()
         self.start_button.configure(state="disabled")
         self.cancel_button.configure(state="normal")
         self.open_button.configure(state="disabled")
+        self.export_button.configure(state="disabled")
         for control in self.controls:
             control.configure(state="disabled")
         self.result.set("Обработка идёт локально." + (" После проверок датасет будет загружен в PostgreSQL." if pg else " Исходные файлы сохраняются."))
@@ -359,6 +376,7 @@ class Application:
             else:
                 self.running = False
                 self.start_button.configure(state="normal")
+                self.export_button.configure(state="normal")
                 self.cancel_button.configure(state="disabled")
                 for control in self.controls:
                     control.configure(state="readonly" if isinstance(control, ttk.Combobox) else "normal")
@@ -371,7 +389,7 @@ class Application:
                     self.open_button.configure(state="normal")
                 else:
                     self.status.set("Итоговый пакет не создан")
-                    self.result.set(data)
+                    self.result.set(data + " Журнал прогона доступен кнопкой «Выгрузить журнал (CSV)».")
                     if not self.pending_close:
                         messagebox.showerror("Обработка", data)
                 if self.pending_close:

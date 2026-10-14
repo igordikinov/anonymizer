@@ -50,3 +50,21 @@ def test_dark_rail_with_in_icon(tk_root):
     assert rail.winfo_ismapped() and rail.winfo_width() == 69
     assert rail.cget("background") == "#1b1b1b"
     assert app.rail_logo.winfo_ismapped()  # только In., белый на чёрном
+
+
+def test_journal_export_button(tmp_path, tk_root, monkeypatch):
+    fresh_surface(tk_root)
+    app = Application(tk_root)
+    tk_root.update()
+    assert app.export_button.instate(["disabled"])  # до прогона журнал выгружать нечего
+    app.runlog.add("info", "import", "start", "", "synthetic entry")
+    target = tmp_path / "exported.csv"
+    from anonymizer.gui import filedialog
+
+    monkeypatch.setattr(filedialog, "asksaveasfilename", lambda **kwargs: str(target))
+    app.export_log()
+    assert target.is_file()
+    rows = target.read_text(encoding="utf-8-sig").splitlines()
+    assert rows[0].startswith("время;") and rows[1].endswith("synthetic entry")
+    monkeypatch.setattr(filedialog, "asksaveasfilename", lambda **kwargs: "")  # диалог отменён
+    app.export_log()

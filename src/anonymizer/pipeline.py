@@ -16,6 +16,7 @@ from .mapping import Project, Transformer
 from .mapping_export import write_mapping_xlsx
 from .metadata import Model
 from .pg_loader import load as pg_load
+from .runlog import RunLog
 from .sql_reader import parse_sql
 from .store import Store
 from .validation import Validator
@@ -45,6 +46,7 @@ class Options:
     pg: PgOptions | None = None
     mapping_xlsx: Path | None = None
     mapping_overwrite: bool = False
+    log: RunLog | None = None
 
 
 def run(options: Options, progress=lambda stage, amount, message: None, cancel: Event | None = None):
@@ -68,6 +70,16 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
         if mapping_path == output or mapping_path.is_relative_to(output) or (source.is_dir() and mapping_path.is_relative_to(source)):
             raise AnonymizerError("Файл карты замен содержит исходные значения и должен находиться вне папки результата и исходных данных.")
     model = Model()
+    log = options.log if options.log is not None else RunLog()
+    progress_cb = progress
+    stage = {"current": "import"}
+
+    def progress(stage_name, amount, message):
+        stage["current"] = stage_name
+        progress_cb(stage_name, amount, message)
+
+    log.add("info", "import", "start", "", f"версия {__version__}; отрасль {options.industry}; "
+            f"источник {'zip' if source.suffix.lower() == '.zip' else 'sql' if source.is_file() else 'csv'}")
     project, store, exporter = None, None, None
     success = False
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -100,6 +112,9 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                 store.count = sum(t["rows"] for t in store.tables.values())
             if not store.tables or not store.count:
                 raise AnonymizerError("Не найдены строки таблиц для обезличивания.")
+            log.add("info", "import", "imported", "", f"таблиц: {len(store.tables)}; строк: {store.count:,}")
+            for skipped_kind, count in sorted(store.skipped.items()):
+                log.add("warning", "import", "skipped_sql", skipped_kind, f"конструкций пропущено: {count}")
             if any(not [f for f in t["fields"] if f["name"] != "sys_id"] for t in store.tables.values()):
                 raise AnonymizerError("Обнаружена таблица, состоящая только из sys_id; её нельзя экспортировать без данных.")
             project = Project(project_path, options.industry)
@@ -124,7 +139,11 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                         progress("transform", completed / store.count, f"Обработано строк: {completed:,}")
                 exporter.end()
             progress("validate", 0, "Проверка связей, ключей и сохраняемых полей")
+            id_to_name = {data["id"]: f"{name[0]}.{name[1]}" for name, data in store.tables.items()}
             validations = validator.finish()
+            log.add_checks(validations, id_to_name)
+            log.add("check", "validate", "preserved_fields", "", "сохраняемые поля и числа/даты JSON совпали")
+            stage["current"] = "publish"
             exporter.close(True)
             exporter = None
             report = {"format": "snp-anonymizer-report-v1", "app_version": __version__, "model": model.data["meta"],
@@ -143,6 +162,8 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                                             progress=lambda done: progress("pg", min(done / max(store.count, 1), 1), f"Загружено строк: {done:,}"),
                                             check=check)
                 progress("pg", 1, f"Загружено строк: {report['pg_load']['rows']:,}")
+                log.add("info", "pg", "pg_load", report["pg_load"]["schema"],
+                        f"таблиц: {report['pg_load']['tables']}; строк: {report['pg_load']['rows']:,}")
             check()
             if options.mapping_xlsx:
                 progress("mapping", 0, "Запись карты замен в Excel")
@@ -154,6 +175,7 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                         yield (domain, old, "snp_" + str(new).lower()) if domain == "schema" else (domain, old, new)
 
                 write_mapping_xlsx(options.mapping_xlsx, mapping_rows(), check=check)
+                log.add("info", "mapping", "mapping_export", options.mapping_xlsx.name, "карта замен выгружена")
                 progress("mapping", 1, "Карта замен записана")
             (staging / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
             check()
@@ -164,13 +186,27 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
         project = None
         staging.rename(output)
         success = True
+        log.add("info", "publish", "published", output.name, f"пакет опубликован; строк: {completed:,}")
         progress("done", 1, f"Готово: {completed:,} строк")
         return report
+    except Cancelled:
+        log.add("warning", stage["current"], "cancelled", "", "Обработка отменена. Итоговый пакет не создан.")
+        raise
     except UnicodeError:
+        log.add("error", stage["current"], "error", "", "Ошибка кодировки. Выберите UTF-8 или Windows-1251.")
         raise AnonymizerError("Ошибка кодировки. Выберите UTF-8 или Windows-1251.") from None
+    except AnonymizerError as error:
+        log.add("error", stage["current"], "error", "", str(error))
+        raise
     except (OSError, ValueError, json.JSONDecodeError) as error:
         # Do not echo raw exception messages: they may contain input content/paths.
+        log.add("error", stage["current"], "error", "", f"Не удалось обработать файлы ({type(error).__name__}). "
+                "Проверьте формат, свободное место и доступ к папкам.")
         raise AnonymizerError(f"Не удалось обработать файлы ({type(error).__name__}). Проверьте формат, свободное место и доступ к папкам.") from None
+    except Exception as error:
+        # Внутренняя ошибка: в журнал идёт только тип исключения, значение не пишется.
+        log.add("error", stage["current"], "error", "", f"Внутренняя ошибка обработки ({type(error).__name__}).")
+        raise
     finally:
         if exporter:
             exporter.close(False)

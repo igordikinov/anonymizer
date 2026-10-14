@@ -7,6 +7,7 @@ from pathlib import Path
 from .errors import AnonymizerError
 from .mapping import INDUSTRIES
 from .pipeline import Options, PgOptions, run
+from .runlog import RunLog
 
 
 def main(argv=None):
@@ -27,6 +28,7 @@ def main(argv=None):
     parser.add_argument("--pg-schema", default="public", help="Целевая схема (создаётся при отсутствии)")
     parser.add_argument("--mapping-xlsx", type=Path, default=None, help="Записать карту замен (что на что изменено) в отдельный Excel-файл; путь вне папки результата")
     parser.add_argument("--mapping-xlsx-overwrite", action="store_true", help="Разрешить перезапись существующего файла карты")
+    parser.add_argument("--log-csv", type=Path, default=None, help="Записать журнал проверок и ошибок в CSV в конце прогона")
     parser.add_argument("--smoke-gui", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if args.smoke_gui or not args.input:
@@ -43,21 +45,36 @@ def main(argv=None):
         pg = PgOptions(args.pg_host, args.pg_port, args.pg_db, args.pg_user, password, args.pg_schema)
     elif any([args.pg_db, args.pg_user, args.pg_password is not None, args.pg_schema != "public"]):
         parser.error("Флаги --pg-* требуют --pg-host; без него загрузка в PostgreSQL не выполняется")
+    runlog = RunLog()
     try:
         report = run(Options(args.input, args.output, args.project, args.industry, args.encoding,
                              "\t" if args.delimiter == "tab" else args.delimiter, tuple(args.schema), args.csv_schema, pg,
-                             args.mapping_xlsx, args.mapping_xlsx_overwrite))
+                             args.mapping_xlsx, args.mapping_xlsx_overwrite, runlog))
+        if args.log_csv:
+            _write_log(runlog, args.log_csv)
         summary = {"tables": report["tables"], "rows": report["rows"], "output": str(args.output)}
         if "pg_load" in report:
             summary["pg_load"] = report["pg_load"]
         print(json.dumps(summary, ensure_ascii=False))
         return 0
     except AnonymizerError as error:
+        if args.log_csv:
+            _write_log(runlog, args.log_csv)
         print(str(error), file=sys.stderr)
         return 1
     except Exception:
+        if args.log_csv:
+            _write_log(runlog, args.log_csv)
         print("Внутренняя ошибка обработки; клиентские значения не записаны в журнал.", file=sys.stderr)
         return 2
+
+
+def _write_log(runlog, path):
+    try:
+        written = runlog.write_csv(path)
+        print(f"Журнал записан: {path} ({written} записей)", file=sys.stderr)
+    except OSError as io_error:
+        print(f"Не удалось записать журнал ({type(io_error).__name__}).", file=sys.stderr)
 
 
 if __name__ == "__main__":

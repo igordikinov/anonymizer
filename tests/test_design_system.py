@@ -26,7 +26,18 @@ def test_vendored_files_present_and_are_png():
 def test_app_icon_is_white_letters_on_dark_background(tk_root):
     import tkinter as tk
 
-    icon = tk.PhotoImage(master=tk_root, file=str(files("anonymizer.resources").joinpath("ds/app-icon.png")))
+    # Создание изображения на общем корне изредка ловит транзиентный TclError
+    # (состязание событий после разрушения виджетов предыдущего теста) —
+    # инфраструктурный сбой ретраится, ассерты падают строго.
+    icon = None
+    for attempt in range(3):
+        try:
+            icon = tk.PhotoImage(master=tk_root, file=str(files("anonymizer.resources").joinpath("ds/app-icon.png")))
+            break
+        except tk.TclError:
+            if attempt == 2:
+                raise
+            tk_root.update()
     assert icon.get(2, 2) == (0x1B, 0x1B, 0x1B)  # фон композиции — тёмный рельс DS
     whites = sum(
         1 for y in range(0, icon.height(), 4) for x in range(0, icon.width(), 4)
