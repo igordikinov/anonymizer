@@ -20,8 +20,8 @@ class Application:
         self.root, self.events, self.cancel = root, queue.Queue(maxsize=20), threading.Event()
         self.running, self.pending_close = False, False
         root.title("SNP Anonymizer")
-        root.geometry("1030x790")
-        root.minsize(870, 720)
+        root.geometry("1030x820")
+        root.minsize(870, 640)
         root.configure(bg="#f4f6fa")
         style = ttk.Style(root)
         style.theme_use("clam")
@@ -61,7 +61,33 @@ class Application:
         self.result = tk.StringVar(value="Будут созданы dump.sql, inserts.sql, csv/ и report.json")
         self.controls = []
 
-        card = self.card(outer, "1. Источник и результат")
+        # Нижняя зона резервируется первой: кнопки запуска видны при любой высоте окна.
+        ttk.Label(outer, textvariable=self.result, style="Sub.TLabel", wraplength=920).pack(side="bottom", anchor="w", pady=5)
+        ttk.Label(outer, textvariable=self.status).pack(side="bottom", anchor="w")
+        self.bar = ttk.Progressbar(outer, maximum=100)
+        self.bar.pack(side="bottom", fill="x", pady=(14, 8))
+        footer = ttk.Frame(outer)
+        footer.pack(side="bottom", fill="x", pady=(4, 0))
+        self.start_button = ttk.Button(footer, text="Обезличить и экспортировать", style="Primary.TButton", command=self.start)
+        self.start_button.pack(side="left")
+        self.cancel_button = ttk.Button(footer, text="Отмена", command=self.cancel.set, state="disabled")
+        self.cancel_button.pack(side="left", padx=10)
+        self.open_button = ttk.Button(footer, text="Открыть результат", command=self.open_result, state="disabled")
+        self.open_button.pack(side="right")
+
+        # Карточки — в прокручиваемой зоне: при нехватке высоты окна контент
+        # доступен колесом/скроллбаром, а кнопки остаются на месте.
+        canvas = tk.Canvas(outer, highlightthickness=0, background="#f4f6fa")
+        vscroll = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vscroll.set)
+        vscroll.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        cards_holder = ttk.Frame(canvas, style="TFrame")
+        canvas_window = canvas.create_window((0, 0), window=cards_holder, anchor="nw")
+        cards_holder.bind("<Configure>", lambda event: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda event: canvas.itemconfigure(canvas_window, width=event.width))
+
+        card = self.card(cards_holder, "1. Источник и результат")
         self.path_row(card, 1, "Исходные данные", self.source, self.pick_source, "SQL…", secondary=("CSV…", self.pick_csv))
         self.path_row(card, 2, "Папка результата", self.output, self.pick_output, "Выбрать…")
         self.path_row(card, 3, "Локальный проект", self.project, self.pick_project, "Открыть…", secondary=("Новый…", self.new_project))
@@ -74,7 +100,7 @@ class Application:
         self.controls.extend([entry, control])
         ttk.Label(card, text="Файл содержит исходные значения: храните его отдельно, получателям данных не передавайте.", style="Card.TLabel").grid(row=6, column=0, columnspan=4, sticky="w", pady=(8, 0))
 
-        card = self.card(outer, "2. Настройки обезличивания")
+        card = self.card(cards_holder, "2. Настройки обезличивания")
         for row, (caption, variable, values) in enumerate([
             ("Отрасль", self.industry, [v["title"] for v in INDUSTRIES.values()]),
             ("Кодировка", self.encoding, ["UTF-8", "Windows-1251"]),
@@ -91,7 +117,7 @@ class Application:
         ttk.Label(card, text="Пусто — все схемы. Несколько схем — через запятую.", style="Card.TLabel").grid(row=5, column=1, sticky="w", padx=(16, 0))
         ttk.Label(card, text="Количества, цены и даты сохраняются, включая JSON. Тексты и бизнес-коды заменяются.\nsys_id не выгружается.", style="Card.TLabel").grid(row=6, column=0, columnspan=2, sticky="w", pady=(12, 0))
 
-        card = self.card(outer, "3. Загрузка в PostgreSQL (необязательно)")
+        card = self.card(cards_holder, "3. Загрузка в PostgreSQL (необязательно)")
         check = ttk.Checkbutton(card, text="После проверок загрузить датасет в базу (TRUNCATE таблиц датасета + COPY)", variable=self.pg_enabled, command=self.pg_toggle)
         check.grid(row=1, column=0, columnspan=4, sticky="w", pady=(0, 6))
         self.controls.append(check)
@@ -111,18 +137,16 @@ class Application:
         ttk.Label(self.pg_frame, text="Таблицы датасета должны существовать в целевой схеме. Сбой — полный откат, база не меняется.\nПароль не сохраняется и не попадает в отчёт.", style="Card.TLabel").grid(row=3, column=0, columnspan=4, sticky="w", pady=(8, 0))
         self.pg_toggle()
 
-        footer = ttk.Frame(outer)
-        footer.pack(fill="x", pady=(4, 0))
-        self.start_button = ttk.Button(footer, text="Обезличить и экспортировать", style="Primary.TButton", command=self.start)
-        self.start_button.pack(side="left")
-        self.cancel_button = ttk.Button(footer, text="Отмена", command=self.cancel.set, state="disabled")
-        self.cancel_button.pack(side="left", padx=10)
-        self.open_button = ttk.Button(footer, text="Открыть результат", command=self.open_result, state="disabled")
-        self.open_button.pack(side="right")
-        self.bar = ttk.Progressbar(outer, maximum=100)
-        self.bar.pack(fill="x", pady=(14, 8))
-        ttk.Label(outer, textvariable=self.status).pack(anchor="w")
-        ttk.Label(outer, textvariable=self.result, style="Sub.TLabel", wraplength=920).pack(anchor="w", pady=5)
+        # Колесо мыши прокручивает зону карточек.
+        def _wheel(event):
+            canvas.yview_scroll(-1 * (event.delta // 120), "units")
+
+        def bind_wheel(widget):
+            widget.bind("<MouseWheel>", _wheel)
+            for child in widget.winfo_children():
+                bind_wheel(child)
+
+        bind_wheel(cards_holder)
         root.protocol("WM_DELETE_WINDOW", self.on_close)
         root.after(100, self.poll)
 
@@ -196,6 +220,11 @@ class Application:
         state = "normal" if self.pg_enabled.get() else "disabled"
         for entry in self.pg_entries:
             entry.configure(state=state)
+        # Поля подключения занимают ~10 строк; до включения флажка они скрыты.
+        if self.pg_enabled.get():
+            self.pg_frame.grid(row=2, column=0, columnspan=4, sticky="ew")
+        else:
+            self.pg_frame.grid_remove()
 
     def pg_options(self):
         if not self.pg_enabled.get():
