@@ -22,7 +22,7 @@ class Store:
         self._dropped_names: set = set()
         self.count, self.batch, self.batch_bytes = 0, [], 0
 
-    def define(self, name, fields, fk_groups=(), key_groups=()):
+    def define(self, name, fields, fk_groups=(), key_groups=(), from_model=False):
         if name in self._dropped_names:
             return  # таблица уже отброшена в skip-режиме; не воскресаем
         identifiers = [*name, *(f["name"] for f in fields)]
@@ -45,7 +45,7 @@ class Store:
                 keys.append(descriptor)
         tid = len(self.tables) + 1
         self.tables[name] = {"id": tid, "fields": [self.model.enrich(name[1], f) for f in fields], "rows": 0,
-                             "fk_groups": groups, "key_groups": keys}
+                             "fk_groups": groups, "key_groups": keys, "from_model": from_model}
 
     @staticmethod
     def _normalize_keys(name, fields, key_groups):
@@ -118,18 +118,23 @@ class Store:
         if name in self._dropped_names:
             return []  # отброшенная таблица: колонок к обработке нет
         if name not in self.tables:
-            fields = []
-            for col in columns:
-                field = self.model.field(name[1], col)
-                if not field and col in {"sys_id", "change_author", "update_date_time"}:
-                    field = {"name": col, "type": {"sys_id": "INTEGER", "change_author": "UUID", "update_date_time": "DATE_TIME"}[col], "nullable": True}
-                if not field:
-                    self.dropped_columns.append((f"{name[0]}.{name[1]}", col))
-                    continue
-                fields.append(field)
-            if not fields:
-                raise AnonymizerError(f"Таблица {name[1]}: ни одна колонка данных не совпала с моделью; данные не относятся к этой таблице.")
-            self.define(name, fields)
+            if name[1] in self.model.tables:
+                # Data-only вход (как CSV): структура — полная таблица модели;
+                # входные колонки отфильтруются ниже, BK-проверка — по эталону.
+                self.define(name, self.model.fields(name[1]), from_model=True)
+            else:
+                fields = []
+                for col in columns:
+                    field = self.model.field(name[1], col)
+                    if not field and col in {"sys_id", "change_author", "update_date_time"}:
+                        field = {"name": col, "type": {"sys_id": "INTEGER", "change_author": "UUID", "update_date_time": "DATE_TIME"}[col], "nullable": True}
+                    if not field:
+                        self.dropped_columns.append((f"{name[0]}.{name[1]}", col))
+                        continue
+                    fields.append(field)
+                if not fields:
+                    raise AnonymizerError(f"Таблица {name[1]}: ни одна колонка данных не совпала с моделью; данные не относятся к этой таблице.")
+                self.define(name, fields)
         available = self.columns(name)
         kept = [col for col in columns if col in available]
         for col in columns:
@@ -137,6 +142,15 @@ class Store:
                 self.dropped_columns.append((f"{name[0]}.{name[1]}", col))
         if not kept:
             raise AnonymizerError(f"Таблица {name[1]}: ни одна колонка данных не совпала с DDL/моделью; данные не относятся к этой таблице.")
+        # Идентичность по бизнес-ключам: структура из модели (CSV без manifest,
+        # data-only SQL), а вход не содержит всех BK-полей эталона — таблица не
+        # опознана; пропускаем целиком с причиной, это не ошибка прогона.
+        if self.tables[name].get("from_model"):
+            bk = [f["name"] for f in self.tables[name]["fields"] if "BK" in (f.get("keys") or [])]
+            missing_bk = [col for col in bk if col not in columns]
+            if missing_bk:
+                self.drop_table(name, f"не совпадает по бизнес-ключам модели: отсутствуют {', '.join(missing_bk)}")
+                return []
         return kept
 
     def add_row(self, name, columns, row):

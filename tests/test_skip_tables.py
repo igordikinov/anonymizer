@@ -105,6 +105,76 @@ def test_cancel_in_skip_mode_still_cancels(tmp_path):
     assert not (tmp_path / "out").exists()
 
 
+def test_bk_missing_table_skipped_bk_present_processed(tmp_path):
+    """Идентичность по бизнес-ключам: item без BK-колонки не опознана и пропущена;
+    loc с BK и лишней колонкой обрабатывается, лишняя колонка отброшена."""
+    src = tmp_path / "source"
+    src.mkdir()
+    # item: BK=item отсутствует во входе (только proddescr) → не опознана.
+    (src / "item.csv").write_text("proddescr,baseuom\nSECRET_DESC,KG\n", encoding="utf-8")
+    # loc: BK=loc есть, extra_col — вне эталона → обработана, колонка отброшена.
+    (src / "loc.csv").write_text("loc,locdescr,extra_col\nSYN_P,SECRET_PLANT,SECRET_EXTRA\n", encoding="utf-8")
+    report = run(Options(src, tmp_path / "out", tmp_path / "synthetic.snpanon"))
+    skipped = {e["table"]: e["reason"] for e in report["skipped_tables"]}
+    assert any("item" in table for table in skipped), skipped
+    assert "бизнес-ключам" in next(iter(skipped.values()))
+    manifest = read_manifest(tmp_path / "out")
+    entry = next(t for t in manifest["tables"] if t["table"] == "loc")
+    fields = [f["name"] for f in entry["fields"]]
+    assert "loc" in fields and "extra_col" not in fields
+    dump = (tmp_path / "out/dump.sql").read_text(encoding="utf-8")
+    assert "SECRET_EXTRA" not in dump and "SYN_P" not in dump
+
+
+def test_bk_check_skips_table_regardless_of_skip_flag(tmp_path):
+    src = tmp_path / "source"
+    src.mkdir()
+    (src / "item.csv").write_text("proddescr,baseuom\nSECRET_DESC,KG\n", encoding="utf-8")
+    # Без галки: тоже пропуск таблицы (идентичность), а не ошибка разбора;
+    # годных таблиц нет → честная ошибка прогона, таблица — в журнале.
+    log = __import__("anonymizer.runlog", fromlist=["RunLog"]).RunLog()
+    with pytest.raises(AnonymizerError, match="Все таблицы пропущены"):
+        run(Options(src, tmp_path / "out", tmp_path / "synthetic.snpanon", log=log))
+    assert not (tmp_path / "out").exists()
+    assert any(e[3] == "table_skipped" and "бизнес-ключам" in e[5] for e in log.entries)
+
+
+def test_sql_data_only_bk_missing_skipped(tmp_path):
+    src = tmp_path / "source.sql"
+    # data-only SQL: структуры из модели нет → ensure строит её из модели; BK нет → пропуск.
+    src.write_text("INSERT INTO public.item (proddescr) VALUES ('SECRET_DESC');\n"
+                   "INSERT INTO public.loc (loc, locdescr) VALUES ('SYN_P', 'SECRET_PLANT');\n", encoding="utf-8")
+    report = run(Options(src, tmp_path / "out", tmp_path / "synthetic.snpanon"))
+    assert any("item" in e["table"] for e in report["skipped_tables"])
+    manifest = read_manifest(tmp_path / "out")
+    assert {t["table"] for t in manifest["tables"]} == {"loc"}
+
+
+def test_sql_with_ddl_bypasses_bk_check(tmp_path):
+    src = tmp_path / "source.sql"
+    # DDL задаёт структуру сам: BK-проверка не применяется, колонки вне DDL отброшены.
+    src.write_text("CREATE TABLE public.custom(k text PRIMARY KEY, note text);\n"
+                   "INSERT INTO public.custom(k, note, extra) VALUES ('SYN_K','SECRET_N','SECRET_E');\n", encoding="utf-8")
+    report = run(Options(src, tmp_path / "out", tmp_path / "synthetic.snpanon"))
+    assert not report["skipped_tables"]
+    dump = (tmp_path / "out/dump.sql").read_text(encoding="utf-8")
+    assert "SECRET_E" not in dump and "SYN_K" not in dump
+
+
+def test_precheck_drops_are_in_journal_too(tmp_path):
+    """Таблицы, отброшенные предпроверкой (skip-режим), попадают и в report,
+    и в журнал — со стадией validate."""
+    src = tmp_path / "source"
+    src.mkdir()
+    (src / "item.csv").write_text("item,proddescr,baseuom\nSYN_OK,SECRET_OK,NOT_A_UOM\n", encoding="utf-8")
+    (src / "loc.csv").write_text("loc,locdescr\nSYN_P,SECRET_PLANT\n", encoding="utf-8")
+    log = __import__("anonymizer.runlog", fromlist=["RunLog"]).RunLog()
+    report = run(Options(src, tmp_path / "out", tmp_path / "p.snpanon", log=log, skip_error_tables=True))
+    assert any("item" in e["table"] for e in report["skipped_tables"])
+    entries = [e for e in log.entries if e[3] == "table_skipped" and "item" in e[4]]
+    assert entries and entries[0][2] == "validate"
+
+
 def test_all_tables_skipped_blocks(tmp_path):
     src = tmp_path / "source"
     src.mkdir()

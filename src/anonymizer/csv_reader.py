@@ -21,7 +21,6 @@ def parse_csv(path, store, check=lambda: None, encoding="utf-8-sig", delimiter=N
     if not entries:
         raise AnonymizerError("В выбранной папке нет CSV.")
     done = 0
-    skipped_files = 0
     for entry in entries:
         check()
         file = (path / entry["file"]).resolve()
@@ -40,11 +39,8 @@ def parse_csv(path, store, check=lambda: None, encoding="utf-8-sig", delimiter=N
             else:
                 reason = f"Файл не читается ({type(error).__name__})."
             store.drop_table((entry["schema"], entry["table"]), reason)
-            skipped_files += 1
         done += file.stat().st_size
         progress(done)
-    if skipped_files == len(entries):
-        raise AnonymizerError("Все CSV-файлы пропущены из-за ошибок; годных таблиц нет.")
 
 
 def _read_csv_file(store, check, entry, file, encoding, delimiter, manifest, path):
@@ -68,7 +64,7 @@ def _read_csv_file(store, check, entry, file, encoding, delimiter, manifest, pat
             store.define(name, entry["fields"], entry.get("foreign_keys", ()), entry.get("key_groups", ()))
         else:
             # CSV has no physical DDL: build the complete selected model table.
-            store.define(name, store.model.fields(name[1]))
+            store.define(name, store.model.fields(name[1]), from_model=True)
         full_header = list(header)
         header = store.ensure(name, header)
         kept_indexes = [i for i, col in enumerate(full_header) if col in set(header)]

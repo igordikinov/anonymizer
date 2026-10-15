@@ -112,6 +112,10 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                     raise AnonymizerError("Указанная схема отсутствует во входных данных.")
                 store.tables = {name: table for name, table in store.tables.items() if name[0] in options.schemas}
                 store.count = sum(t["rows"] for t in store.tables.values())
+            # Пропущенные таблицы — в журнал до проверки «нечего выдавать»,
+            # чтобы причина оставалась в журнале даже при фатальном исходе.
+            for table, reason in store.dropped_tables:
+                log.add("error", "import", "table_skipped", table, reason)
             if not store.tables or not store.count:
                 if store.dropped_tables:
                     raise AnonymizerError("Все таблицы пропущены из-за ошибок; выдавать нечего.")
@@ -126,6 +130,7 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                 raise AnonymizerError("Обнаружена таблица, состоящая только из sys_id; её нельзя экспортировать без данных.")
             project = Project(project_path, options.industry)
             transformer = Transformer(model, project, store)
+            logged_drops = len(store.dropped_tables)  # уже в журнале (import-стадия)
             if options.skip_error_tables:
                 # Предпроверка таблиц: типы, обязательные поля, нулевой байт, правила
                 # (JSON в ключе). Упавшая таблица исключается из выдачи с записью в журнал.
@@ -144,9 +149,9 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                     except AnonymizerError as error:
                         store.drop_table(name, str(error))
                 progress("validate", 1, "Предпроверка таблиц завершена")
-            for table, reason in store.dropped_tables:
-                log.add("error", "import", "table_skipped", table, reason)
             skipped_entries = [{"table": name, "stage": "import", "reason": reason} for name, reason in store.dropped_tables]
+            for name, reason in store.dropped_tables[logged_drops:]:
+                log.add("error", "validate", "table_skipped", name, reason)  # добавленные предпроверкой
             if not store.tables:
                 raise AnonymizerError("Все таблицы пропущены из-за ошибок; выдавать нечего.")
             schema_names = {s: project.pseudonym("schema", s, label=None) for s in sorted({n[0] for n in store.tables})}
