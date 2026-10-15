@@ -18,9 +18,13 @@ class Store:
         """)
         self.model, self.tables, self.skipped = model, {}, {}
         self.dropped_columns: list[tuple[str, str]] = []
+        self.dropped_tables: list[tuple[str, str]] = []  # (schema.table, причина)
+        self._dropped_names: set = set()
         self.count, self.batch, self.batch_bytes = 0, [], 0
 
     def define(self, name, fields, fk_groups=(), key_groups=()):
+        if name in self._dropped_names:
+            return  # таблица уже отброшена в skip-режиме; не воскресаем
         identifiers = [*name, *(f["name"] for f in fields)]
         if any(not isinstance(n, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9$]{0,62}", n) for n in identifiers):
             raise AnonymizerError("Некорректное имя схемы, таблицы или колонки. Поддерживаются технические имена SNP.")
@@ -111,6 +115,8 @@ class Store:
         """
         if not columns or len(set(columns)) != len(columns):
             raise AnonymizerError(f"Таблица {name[1]}: пустые или повторяющиеся колонки.")
+        if name in self._dropped_names:
+            return []  # отброшенная таблица: колонок к обработке нет
         if name not in self.tables:
             fields = []
             for col in columns:
@@ -134,7 +140,9 @@ class Store:
         return kept
 
     def add_row(self, name, columns, row):
-        table = self.tables[name]
+        table = self.tables.get(name)
+        if table is None:
+            return  # таблица отброшена в skip-режиме
         values = dict(zip(columns, row, strict=True))
         body = [values.get(f["name"]) for f in table["fields"]]
         for f, value in zip(table["fields"], body):
@@ -154,6 +162,21 @@ class Store:
             self.batch.clear()
             self.batch_bytes = 0
             self.db.commit()
+
+    def drop_table(self, name, reason):
+        """Убирает таблицу из обработки (skip-режим): спул, структура, счётчик.
+
+        Решение окончательно: последующие define/ensure для этой таблицы
+        игнорируются, чтобы поздний CREATE/INSERT не воскресил отброшенное.
+        """
+        self.flush()  # незакоммиченный батч мог уже содержать строки таблицы
+        data = self.tables.pop(name, None)
+        if data is not None:
+            self.db.execute("DELETE FROM rows WHERE tid=?", (data["id"],))
+            self.count -= data["rows"]
+        if name not in self._dropped_names:
+            self._dropped_names.add(name)
+            self.dropped_tables.append((f"{name[0]}.{name[1]}", reason))
 
     def rows(self, tid):
         self.flush()

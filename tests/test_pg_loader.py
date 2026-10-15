@@ -52,9 +52,10 @@ class FakeCursor:
 class FakeConnection:
     def __init__(self, owner):
         self.owner = owner
+        self.cursor_class = FakeCursor
 
     def cursor(self):
-        return FakeCursor(self.owner)
+        return self.owner.cursor_class(self.owner)
 
     def commit(self):
         self.owner.commits += 1
@@ -72,6 +73,7 @@ class FakePsycopg2:
         self.connect_kwargs = {}
         self.executed, self.results, self.copied = [], [], []
         self.commits = self.rollbacks = self.closed = 0
+        self.cursor_class = FakeCursor
 
     def connect(self, **kwargs):
         self.connect_kwargs.update(kwargs)
@@ -102,7 +104,7 @@ def pg_options(schema="public_5"):
 
 def test_happy_path_sql_shape_and_streaming(dump, monkeypatch):
     fake = install(FakePsycopg2(existing_tables={"parent", "child"}), monkeypatch)
-    summary = pg_loader.load(tables(), dump, pg_options())
+    summary, skipped_pg = pg_loader.load(tables(), dump, pg_options())
     assert summary == {"schema": "public_5", "tables": 2, "rows": 3}
     sqls = [sql for sql, _ in fake.executed]
     assert any(sql.startswith("CREATE SCHEMA IF NOT EXISTS") for sql in sqls)
@@ -173,6 +175,34 @@ def test_missing_driver_gives_safe_error(dump, monkeypatch):
     monkeypatch.setattr("builtins.__import__", no_psycopg2)
     with pytest.raises(AnonymizerError, match="psycopg2-binary"):
         pg_loader.load(tables(), dump, pg_options())
+
+
+def test_cancel_inside_copy_is_not_skipped_but_raised(dump, monkeypatch):
+    """psycopg2 оборачивает Cancelled из стримера в QueryCanceled; повторный check()
+    в except-ветке поднимает Cancelled наружу — без коммита частичных данных."""
+    from anonymizer.errors import Cancelled
+
+    class WrappingCursor(FakeCursor):
+        def copy_expert(self, sql, stream, size=0):
+            try:
+                while stream.read(4096):
+                    pass
+            except Cancelled:
+                raise RuntimeError("canceling statement due to user request")  # как psycopg2
+
+    fake = FakePsycopg2(existing_tables={"parent", "child"})
+    fake.cursor_class = WrappingCursor
+    install(fake, monkeypatch)
+    calls = {"n": 0}
+
+    def check():
+        calls["n"] += 1
+        if calls["n"] > 1:  # первый check — чтение секции, второй — повторный в except
+            raise Cancelled("Обработка отменена.")
+
+    with pytest.raises(Cancelled):
+        pg_loader.load(tables(), dump, pg_options(), check=check, skip_failed_tables=True)
+    assert fake.commits == 0 and fake.rollbacks == 1
 
 
 def test_section_reader_stops_at_terminator(tmp_path):

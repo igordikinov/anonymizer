@@ -29,6 +29,7 @@ def main(argv=None):
     parser.add_argument("--mapping-xlsx", type=Path, default=None, help="Записать карту замен (что на что изменено) в отдельный Excel-файл; путь вне папки результата")
     parser.add_argument("--mapping-xlsx-overwrite", action="store_true", help="Разрешить перезапись существующего файла карты")
     parser.add_argument("--log-csv", type=Path, default=None, help="Записать журнал проверок и ошибок в CSV в конце прогона")
+    parser.add_argument("--skip-error-tables", action="store_true", help="Пропускать таблицы с ошибками вместо остановки обработки")
     parser.add_argument("--smoke-gui", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if args.smoke_gui or not args.input:
@@ -49,7 +50,8 @@ def main(argv=None):
     try:
         report = run(Options(args.input, args.output, args.project, args.industry, args.encoding,
                              "\t" if args.delimiter == "tab" else args.delimiter, tuple(args.schema), args.csv_schema, pg,
-                             args.mapping_xlsx, args.mapping_xlsx_overwrite, runlog))
+                             args.mapping_xlsx, args.mapping_xlsx_overwrite, runlog,
+                             args.skip_error_tables))
         if args.log_csv:
             _write_log(runlog, args.log_csv)
         summary = {"tables": report["tables"], "rows": report["rows"], "output": str(args.output)}

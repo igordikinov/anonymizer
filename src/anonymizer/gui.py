@@ -140,6 +140,7 @@ class Application:
         self.pg_db, self.pg_user = tk.StringVar(), tk.StringVar()
         self.pg_password, self.pg_schema = tk.StringVar(), tk.StringVar(value="public")
         self.mapping_xlsx = tk.StringVar()
+        self.skip_error_tables = tk.BooleanVar(value=False)
         self.runlog = RunLog()
         self.status = tk.StringVar(value="Выберите SQL-файл или папку CSV")
         self.result = tk.StringVar(value="Будут созданы dump.sql, inserts.sql, csv/ и report.json")
@@ -185,6 +186,10 @@ class Application:
         control.grid(row=5, column=2, columnspan=2, sticky="ew", padx=(6, 0), pady=4)
         self.controls.extend([entry, control])
         ttk.Label(card, text="Файл содержит исходные значения: храните его отдельно, получателям данных не передавайте.", style="Hint.TLabel").grid(row=6, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        skip_check = ttk.Checkbutton(card, text="Пропускать таблицы с ошибками (продолжить обработку остальных; причины — в журнале)",
+                                     variable=self.skip_error_tables)
+        skip_check.grid(row=7, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        self.controls.append(skip_check)
 
         card = self.card(cards_holder, "2. Настройки обезличивания")
         for row, (caption, variable, values) in enumerate([
@@ -349,7 +354,7 @@ class Application:
                           {"Авто": None, "Табуляция": "\t"}.get(self.delimiter.get(), self.delimiter.get()),
                           tuple(s.strip() for s in self.schemas.get().split(",") if s.strip()), "public", pg,
                           Path(self.mapping_xlsx.get()) if self.mapping_xlsx.get().strip() else None, True,
-                          self.runlog)
+                          self.runlog, self.skip_error_tables.get())
         self.running = True
         self.cancel.clear()
         self.start_button.configure(state="disabled")

@@ -13,7 +13,7 @@ from __future__ import annotations
 import io
 import re
 
-from .errors import AnonymizerError
+from .errors import AnonymizerError, Cancelled
 from .metadata import quote
 
 CONNECT_TIMEOUT = 10
@@ -73,8 +73,8 @@ def connect(pg, psycopg2):
     return connection
 
 
-def load(tables, dump_path, pg, progress=lambda done: None, check=lambda: None):
-    """Loads every dataset table into pg.schema from the staged dump; report-safe summary."""
+def load(tables, dump_path, pg, progress=lambda done: None, check=lambda: None, skip_failed_tables=False):
+    """Loads every dataset table into pg.schema; returns (summary, skipped tables)."""
     try:
         import psycopg2
     except ImportError:
@@ -86,6 +86,7 @@ def load(tables, dump_path, pg, progress=lambda done: None, check=lambda: None):
         raise AnonymizerError("Таблица с одинаковым именем встречается в нескольких схемах датасета; "
                               "загрузка в одну целевую схему невозможна без переименования.")
     connection = connect(pg, psycopg2)
+    skipped = []
     try:
         with connection.cursor() as cursor:
             cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {quote(pg.schema)}")
@@ -110,8 +111,29 @@ def load(tables, dump_path, pg, progress=lambda done: None, check=lambda: None):
                                  .replace(f'"{match.group(1)}".', f'{quote(pg.schema)}.', 1)
                                  .rstrip(";"))
                     section = _SectionReader(stream, check)
+                    savepoint = f"snp_table_{match.group(2)}"
                     with connection.cursor() as cursor:
-                        cursor.copy_expert(statement, section, size=8 * 1024 * 1024)
+                        cursor.execute(f"SAVEPOINT {quote(savepoint)}")
+                        try:
+                            cursor.copy_expert(statement, section, size=8 * 1024 * 1024)
+                        except Cancelled:
+                            raise  # отмена — не табличная ошибка; частичные данные не коммитятся
+                        except Exception as error:
+                            # psycopg2 оборачивает исключение из стримера (check() -> Cancelled)
+                            # в QueryCanceled: единственный способ узнать об отмене — спросить снова.
+                            check()
+                            if not skip_failed_tables:
+                                raise
+                            cursor.execute(f"ROLLBACK TO SAVEPOINT {quote(savepoint)}")
+                            skipped.append({"table": match.group(2),
+                                            "reason": f"загрузка не удалась ({type(error).__name__}); таблица пропущена"})
+                            copied.add(match.group(2))  # таблица обработана (пропущена осознанно)
+                            if not section.done:  # секция могла быть прочитана до конца до отказа сервера
+                                while True:
+                                    rest = stream.readline()
+                                    if not rest or rest.rstrip("\r\n") == "\\.": break
+                            header = stream.readline()
+                            continue
                     copied.add(match.group(2))
                     total += section.count
                     progress(total)
@@ -121,7 +143,10 @@ def load(tables, dump_path, pg, progress=lambda done: None, check=lambda: None):
         if copied != names or total == 0:
             raise AnonymizerError("В дампе не найдены секции COPY всех таблиц датасета; загрузка отменена.")
         connection.commit()
-        return {"schema": pg.schema, "tables": len(names), "rows": total}
+        summary = {"schema": pg.schema, "tables": len(names), "rows": total}
+        if skipped:
+            summary["skipped"] = skipped
+        return summary, skipped
     except AnonymizerError:
         _quiet_rollback(connection)
         raise

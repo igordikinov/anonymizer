@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from .errors import AnonymizerError
+from .errors import AnonymizerError, Cancelled
 
 MAX_FIELD = 8 * 1024 * 1024
 
@@ -252,8 +252,8 @@ def literal(tokens, lexer):
     lexer.fail("INSERT поддерживает только литералы")
 
 
-def parse_sql(path: Path, store, check=lambda: None, encoding="utf-8-sig", progress=lambda n: None):
-    """Store interface: define, columns, add_row, ensure, skipped."""
+def parse_sql(path: Path, store, check=lambda: None, encoding="utf-8-sig", progress=lambda n: None, skip_error_tables=False):
+    """Store interface: define, columns, add_row, ensure, skipped, drop_table."""
     schema = "public"
     with path.open(encoding=encoding, newline="") as stream:
         reader = Reader(stream, check, encoding)
@@ -268,75 +268,104 @@ def parse_sql(path: Path, store, check=lambda: None, encoding="utf-8-sig", progr
                 if kind.is_("UNLOGGED"):
                     kind = lex.pop()
                 if kind.is_("TABLE"):
-                    if lex.peek().is_("IF"):
-                        expect(lex, "IF"); expect(lex, "NOT"); expect(lex, "EXISTS")
-                    name = qualified(lex, schema)
-                    fields, constraints, fk_groups, key_groups = [], [], [], []
-                    for group in comma_groups(lex):
-                        if group[0].is_("CONSTRAINT") or group[0].is_("PRIMARY") or group[0].is_("UNIQUE") or group[0].is_("FOREIGN") or group[0].is_("CHECK"):
-                            constraints.append(group)
-                            continue
-                        column = group[0].value
-                        type_tokens = []
-                        for token in group[1:]:
-                            if token.kind == "id" and token.value.upper() in {"DEFAULT", "NOT", "NULL", "COLLATE", "CONSTRAINT", "PRIMARY", "UNIQUE", "CHECK", "REFERENCES", "GENERATED"}:
-                                break
-                            type_tokens.append(token.value)
-                        field = {"name": column, "sql_type": " ".join(type_tokens), "nullable": not any(group[i].is_("NOT") and group[i+1].is_("NULL") for i in range(len(group)-1))}
-                        key = apply_column_constraints(field, group, name[0], lex)
-                        fields.append(field)
-                        if key:
-                            key_groups.append(key)
-                    for constraint in constraints:
-                        fks, keys = apply_table_constraint(fields, constraint, name[0], lex)
-                        fk_groups.extend(fks)
-                        key_groups.extend(keys)
-                    store.define(name, fields, fk_groups, key_groups)
+                    name = None
+                    try:
+                        if lex.peek().is_("IF"):
+                            expect(lex, "IF"); expect(lex, "NOT"); expect(lex, "EXISTS")
+                        name = qualified(lex, schema)
+                        fields, constraints, fk_groups, key_groups = [], [], [], []
+                        for group in comma_groups(lex):
+                            if group[0].is_("CONSTRAINT") or group[0].is_("PRIMARY") or group[0].is_("UNIQUE") or group[0].is_("FOREIGN") or group[0].is_("CHECK"):
+                                constraints.append(group)
+                                continue
+                            column = group[0].value
+                            type_tokens = []
+                            for token in group[1:]:
+                                if token.kind == "id" and token.value.upper() in {"DEFAULT", "NOT", "NULL", "COLLATE", "CONSTRAINT", "PRIMARY", "UNIQUE", "CHECK", "REFERENCES", "GENERATED"}:
+                                    break
+                                type_tokens.append(token.value)
+                            field = {"name": column, "sql_type": " ".join(type_tokens), "nullable": not any(group[i].is_("NOT") and group[i+1].is_("NULL") for i in range(len(group)-1))}
+                            key = apply_column_constraints(field, group, name[0], lex)
+                            fields.append(field)
+                            if key:
+                                key_groups.append(key)
+                        for constraint in constraints:
+                            fks, keys = apply_table_constraint(fields, constraint, name[0], lex)
+                            fk_groups.extend(fks)
+                            key_groups.extend(keys)
+                        store.define(name, fields, fk_groups, key_groups)
+                    except Cancelled:
+                        raise
+                    except AnonymizerError as error:
+                        if not skip_error_tables:
+                            raise
+                        if name is not None:
+                            store.drop_table(name, str(error))
+                        else:
+                            store.dropped_tables.append((f"{schema}.<неразобранная таблица>", str(error)))
+                        skip_statement(lex)
+                        continue
                 else:
                     store.skipped["create_" + kind.value] = store.skipped.get("create_" + kind.value, 0) + 1
                 skip_statement(lex)
             elif t.is_("COPY"):
                 name = qualified(lex, schema)
-                full_columns = [g[0].value for g in comma_groups(lex)] if lex.peek().value == "(" else store.columns(name)
-                expect(lex, "FROM"); expect(lex, "STDIN"); expect(lex, ";")
-                if reader.readline().strip():
-                    lex.fail("Данные COPY должны начинаться со следующей строки")
-                columns = store.ensure(name, full_columns)
-                kept_indexes = [i for i, col in enumerate(full_columns) if col in set(columns)]
-                while True:
-                    check()
-                    line = reader.readline()
-                    if not line:
-                        lex.fail("Незавершённый COPY")
-                    if line.rstrip("\r\n") == "\\.":
-                        break
-                    raw = line.rstrip("\r\n").split("\t")
-                    if len(raw) != len(full_columns):
-                        lex.fail("Число полей COPY не совпадает со списком колонок")
-                    values = [None if raw[i] == r"\N" else decode_escape(raw[i], reader.encoding) for i in kept_indexes]
-                    store.add_row(name, columns, values)
-                    if store.count % 1000 == 0:
-                        progress(reader.read_bytes)
+                try:
+                    full_columns = [g[0].value for g in comma_groups(lex)] if lex.peek().value == "(" else store.columns(name)
+                    expect(lex, "FROM"); expect(lex, "STDIN"); expect(lex, ";")
+                    if reader.readline().strip():
+                        lex.fail("Данные COPY должны начинаться со следующей строки")
+                    columns = store.ensure(name, full_columns)
+                    kept_indexes = [i for i, col in enumerate(full_columns) if col in set(columns)]
+                    while True:
+                        check()
+                        line = reader.readline()
+                        if not line:
+                            lex.fail("Незавершённый COPY")
+                        if line.rstrip("\r\n") == "\\.":
+                            break
+                        raw = line.rstrip("\r\n").split("\t")
+                        if len(raw) != len(full_columns):
+                            lex.fail("Число полей COPY не совпадает со списком колонок")
+                        values = [None if raw[i] == r"\N" else decode_escape(raw[i], reader.encoding) for i in kept_indexes]
+                        store.add_row(name, columns, values)
+                except Cancelled:
+                    raise
+                except AnonymizerError as error:
+                    if not skip_error_tables:
+                        raise
+                    store.drop_table(name, str(error))
+                    while True:  # ресинк до конца тела COPY
+                        line = reader.readline()
+                        if not line or line.rstrip("\r\n") == "\\.": break
                 progress(reader.read_bytes)
             elif t.is_("INSERT"):
                 expect(lex, "INTO")
                 name = qualified(lex, schema)
-                full_columns = [g[0].value for g in comma_groups(lex)] if lex.peek().value == "(" else store.columns(name)
-                expect(lex, "VALUES")
-                columns = store.ensure(name, full_columns)
-                kept_indexes = [i for i, col in enumerate(full_columns) if col in set(columns)]
-                while True:
-                    row = [literal(g, lex) for g in comma_groups(lex)]
-                    if len(row) != len(full_columns):
-                        lex.fail("Число значений INSERT не совпадает с колонками")
-                    store.add_row(name, columns, [row[i] for i in kept_indexes])
-                    if store.count % 1000 == 0:
-                        progress(reader.read_bytes)
-                    if lex.peek().value == ",":
-                        lex.pop()
-                    else:
-                        expect(lex, ";")
-                        break
+                try:
+                    full_columns = [g[0].value for g in comma_groups(lex)] if lex.peek().value == "(" else store.columns(name)
+                    expect(lex, "VALUES")
+                    columns = store.ensure(name, full_columns)
+                    kept_indexes = [i for i, col in enumerate(full_columns) if col in set(columns)]
+                    while True:
+                        row = [literal(g, lex) for g in comma_groups(lex)]
+                        if len(row) != len(full_columns):
+                            lex.fail("Число значений INSERT не совпадает с колонками")
+                        store.add_row(name, columns, [row[i] for i in kept_indexes])
+                        if store.count % 1000 == 0:
+                            progress(reader.read_bytes)
+                        if lex.peek().value == ",":
+                            lex.pop()
+                        else:
+                            expect(lex, ";")
+                            break
+                except Cancelled:
+                    raise
+                except AnonymizerError as error:
+                    if not skip_error_tables:
+                        raise
+                    store.drop_table(name, str(error))
+                    skip_statement(lex)  # ресинк до конца инструкции
                 progress(reader.read_bytes)
             elif t.is_("SET"):
                 group = skip_statement(lex, collect=True)

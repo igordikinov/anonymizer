@@ -19,7 +19,7 @@ from .pg_loader import load as pg_load
 from .runlog import RunLog
 from .sql_reader import parse_sql
 from .store import Store
-from .validation import Validator
+from .validation import Validator, validate_value
 from .zip_input import extract_dataset
 
 
@@ -47,6 +47,7 @@ class Options:
     mapping_xlsx: Path | None = None
     mapping_overwrite: bool = False
     log: RunLog | None = None
+    skip_error_tables: bool = False
 
 
 def run(options: Options, progress=lambda stage, amount, message: None, cancel: Event | None = None):
@@ -100,9 +101,10 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
             progress("import", 0, "Чтение и проверка структуры")
             callback = lambda n: progress("import", min(n / max(total, 1), 1), "Чтение данных")
             if data_source.is_file():
-                parse_sql(data_source, store, check, options.encoding, callback)
+                parse_sql(data_source, store, check, options.encoding, callback, skip_error_tables=options.skip_error_tables)
             else:
-                parse_csv(data_source, store, check, options.encoding, options.delimiter, options.csv_schema, callback)
+                parse_csv(data_source, store, check, options.encoding, options.delimiter, options.csv_schema, callback,
+                          skip_error_tables=options.skip_error_tables)
             store.flush()
             if options.schemas:
                 present = {name[0] for name in store.tables}
@@ -111,6 +113,8 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                 store.tables = {name: table for name, table in store.tables.items() if name[0] in options.schemas}
                 store.count = sum(t["rows"] for t in store.tables.values())
             if not store.tables or not store.count:
+                if store.dropped_tables:
+                    raise AnonymizerError("Все таблицы пропущены из-за ошибок; выдавать нечего.")
                 raise AnonymizerError("Не найдены строки таблиц для обезличивания.")
             log.add("info", "import", "imported", "", f"таблиц: {len(store.tables)}; строк: {store.count:,}")
             for table, column in store.dropped_columns:
@@ -122,6 +126,29 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                 raise AnonymizerError("Обнаружена таблица, состоящая только из sys_id; её нельзя экспортировать без данных.")
             project = Project(project_path, options.industry)
             transformer = Transformer(model, project, store)
+            if options.skip_error_tables:
+                # Предпроверка таблиц: типы, обязательные поля, нулевой байт, правила
+                # (JSON в ключе). Упавшая таблица исключается из выдачи с записью в журнал.
+                progress("validate", 0, "Предпроверка таблиц")
+                for name, table in list(store.tables.items()):
+                    try:
+                        for f in table["fields"]:
+                            transformer.rule(name[1], f, name[0])
+                        for old in store.rows(table["id"]):
+                            check()
+                            for f, value in zip(table["fields"], old):
+                                if f["name"] != "sys_id":
+                                    validate_value(name[1], f, value)
+                    except Cancelled:
+                        raise  # отмена — не табличная ошибка
+                    except AnonymizerError as error:
+                        store.drop_table(name, str(error))
+                progress("validate", 1, "Предпроверка таблиц завершена")
+            for table, reason in store.dropped_tables:
+                log.add("error", "import", "table_skipped", table, reason)
+            skipped_entries = [{"table": name, "stage": "import", "reason": reason} for name, reason in store.dropped_tables]
+            if not store.tables:
+                raise AnonymizerError("Все таблицы пропущены из-за ошибок; выдавать нечего.")
             schema_names = {s: project.pseudonym("schema", s, label=None) for s in sorted({n[0] for n in store.tables})}
             schema_names = {s: "snp_" + value.lower() for s, value in schema_names.items()}
             validator = Validator(store, transformer)
@@ -153,6 +180,7 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                       "industry": options.industry, "tables": len(store.tables), "rows": completed,
                       "changed_cells": transformer.changed, "sys_id": "omitted; generated in dump DDL",
                       "output_values_sha256": output_digest.hexdigest(), "validation": validations,
+                      "skipped_tables": skipped_entries,
                       "skipped_sql_statements": store.skipped,
                       "scope": "reconstructed tables and data; no original functions, grants, comments, defaults or indexes",
                       "privacy": "nontechnical text and JSON strings/keys pseudonymized; JSON numbers/dates preserved; project mappings excluded",
@@ -161,9 +189,13 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
             check()
             if options.pg:
                 progress("pg", 0, "Загрузка в PostgreSQL")
-                report["pg_load"] = pg_load(store.tables, staging / "dump.sql", options.pg,
-                                            progress=lambda done: progress("pg", min(done / max(store.count, 1), 1), f"Загружено строк: {done:,}"),
-                                            check=check)
+                pg_summary, pg_skipped = pg_load(store.tables, staging / "dump.sql", options.pg,
+                                                 progress=lambda done: progress("pg", min(done / max(store.count, 1), 1), f"Загружено строк: {done:,}"),
+                                                 check=check, skip_failed_tables=options.skip_error_tables)
+                report["pg_load"] = pg_summary
+                for item in pg_skipped:
+                    log.add("warning", "pg", "table_skipped", item["table"], item["reason"])
+                    skipped_entries.append({"table": item["table"], "stage": "pg", "reason": item["reason"]})
                 progress("pg", 1, f"Загружено строк: {report['pg_load']['rows']:,}")
                 log.add("info", "pg", "pg_load", report["pg_load"]["schema"],
                         f"таблиц: {report['pg_load']['tables']}; строк: {report['pg_load']['rows']:,}")
