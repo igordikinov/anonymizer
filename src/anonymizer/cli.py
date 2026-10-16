@@ -31,10 +31,22 @@ def main(argv=None):
     parser.add_argument("--log-csv", type=Path, default=None, help="Записать журнал проверок и ошибок в CSV в конце прогона")
     parser.add_argument("--skip-error-tables", action="store_true", help="Пропускать таблицы с ошибками вместо остановки обработки")
     parser.add_argument("--smoke-gui", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--smoke-gui-report", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    if args.smoke_gui_report and not args.smoke_gui:
+        parser.error("--smoke-gui-report требует --smoke-gui")
     if args.smoke_gui or not args.input:
         from .gui import launch
-        launch(smoke=args.smoke_gui)
+        try:
+            launch(smoke=args.smoke_gui, smoke_report=args.smoke_gui_report)
+        except Exception:
+            if not args.smoke_gui:
+                raise
+            # A windowed PyInstaller executable must fail smoke with an exit
+            # code rather than leave its unhandled-exception dialog open.
+            if sys.stderr is not None:
+                print("Smoke GUI: оформление или встроенные шрифты не прошли проверку.", file=sys.stderr)
+            return 1
         return 0
     if not args.output or not args.project:
         parser.error("Для CLI обязательны --input, --output и --project")

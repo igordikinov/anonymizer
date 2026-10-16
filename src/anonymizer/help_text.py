@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from . import ds_tokens as ds
+from .theme import install
 
 HELP_TEXT = """НАЗНАЧЕНИЕ
 
@@ -69,15 +70,17 @@ HELP_TEXT = """НАЗНАЧЕНИЕ
 
 
 def show_help(parent, version):
+    theme = install(parent.winfo_toplevel())
+    px = theme["px"]
     window = tk.Toplevel(parent)
     window.title(f"Справка — SNP Anonymizer {version}")
     window.geometry("760x580")
     window.minsize(560, 380)
     window.transient(parent)
-    frame = ttk.Frame(window, padding=ds.SPACE_M)
+    frame = ttk.Frame(window, padding=px(ds.SPACE_L))
     frame.pack(fill="both", expand=True)
     text = tk.Text(frame, wrap="word", relief="flat", background=ds.BG_SURFACE, foreground=ds.TEXT_PRIMARY,
-                   font=(ds.FONT_FALLBACK, -14), padx=ds.SPACE_M, pady=10, takefocus=0)
+                   font=theme["fonts"]["body"], padx=px(ds.SPACE_M), pady=px(ds.SPACE_M), takefocus=0)
     scroll = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
     text.configure(yscrollcommand=scroll.set)
     scroll.pack(side="right", fill="y")
@@ -85,7 +88,7 @@ def show_help(parent, version):
     text.insert("1.0", HELP_TEXT)
     text.configure(state="disabled")
     close = ttk.Button(window, text="Закрыть", command=window.destroy, style="Primary.TButton")
-    close.pack(pady=(0, ds.SPACE_M))
+    close.pack(pady=(0, px(ds.SPACE_M)))
     window.bind("<Escape>", lambda event: window.destroy())
     window.bind("<F1>", lambda event: show_help(parent, version))
     return window

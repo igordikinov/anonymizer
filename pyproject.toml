@@ -19,7 +19,7 @@ snp-anonymizer = "anonymizer.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-anonymizer = ["resources/*.json"]
+anonymizer = ["resources/*.json", "resources/ds/*", "resources/fonts/*.ttf", "resources/fonts/*.txt", "resources/fonts/*.json"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

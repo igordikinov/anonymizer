@@ -39,11 +39,13 @@ TEXT_SUB = "#444647"         # hints on surface
 TEXT_SECONDARY = "#adb0b4"   # --scp-content-secondary
 TEXT_ON_BRAND = "#ffffff"    # --scp-content-constant
 TEXT_DISABLED = "#d9d9d9"    # --scp-content-disabled
+BUTTON_TEXT_DISABLED = "#bfbfc1"  # Button.jsx stroked / primary disabled text
 
 # Borders — border-neutral-*
 BORDER_TERTIARY = "#eaeaea"  # --scp-border-neutral-tertiary (inputs, hairlines)
 BORDER_NEUTRAL = "#949598"   # --scp-border-neutral-default (обводка stroked-кнопок)
 BORDER_BRAND = "#9000ff"     # focused control
+BORDER_HOVER = "#5a5a5c"     # input hover
 
 # System states — system-*
 SUCCESS = "#22bb55"
@@ -55,11 +57,14 @@ FONT_FALLBACK = "Segoe UI"
 
 # Spacing / corners — spacing.css и Material corner-small/medium/large
 SPACE_S = 8
+SPACE_XS = 4
 SPACE_M = 12
 SPACE_L = 16
 SPACE_XL = 24
 RADIUS_BUTTON = 4
 RADIUS_CARD = 8
+RADIUS_INPUT = 5             # product Input component
+CONTROL_HEIGHT = 40
 
 # Верхняя чёрная полоса: надпись вдвое мельче прежнего титула 22px (запрос владельца).
 CAPTION_SIZE = -11

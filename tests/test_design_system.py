@@ -71,6 +71,27 @@ def test_palette_carries_inplan_product_canon():
     assert "Manrope" not in source  # Manrope — шрифт презентационного среза DS, не продукта
 
 
+def test_component_values_match_canonical_sources():
+    if not CANONICAL_ZIP.is_file():
+        pytest.skip("канонический архив дизайн-системы недоступен на этой машине")
+    with zipfile.ZipFile(CANONICAL_ZIP) as archive:
+        colors = archive.read("tokens/colors.css").decode("utf-8")
+        button = archive.read("components/buttons/Button.jsx").decode("utf-8")
+        field = archive.read("components/forms/Input.jsx").decode("utf-8")
+        spacing = archive.read("tokens/spacing.css").decode("utf-8")
+    for token, value in [("--scp-text-neutral-disable", ds_tokens.BUTTON_TEXT_DISABLED),
+                         ("--scp-border-neutral-hover", ds_tokens.BORDER_HOVER),
+                         ("--scp-border-neutral-default", ds_tokens.BORDER_NEUTRAL)]:
+        assert re.search(re.escape(token) + r"\s*:\s*" + re.escape(value), colors)
+    assert "color:var(--scp-text-neutral-disable)" in button
+    assert "font-weight:600" in button
+    assert f"height:{ds_tokens.CONTROL_HEIGHT}px;font-size:14px" in button
+    assert f"border-radius:{ds_tokens.RADIUS_INPUT}px" in field
+    assert f".scp-field--md{{height:{ds_tokens.CONTROL_HEIGHT}px}}" in field
+    assert f"--scp-radius-button:{ds_tokens.RADIUS_BUTTON}px" in spacing
+    assert f"--scp-border-radius-md:{ds_tokens.RADIUS_CARD}px" in spacing
+
+
 def test_caption_moved_to_top_bar_with_halved_font(tk_root):
     from anonymizer.gui import Application
 

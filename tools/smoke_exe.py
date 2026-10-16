@@ -17,7 +17,19 @@ def check(exe):
     with tempfile.TemporaryDirectory(prefix="snp-anon-exe-smoke-") as name:
         root = Path(name)
         kwargs = {"cwd": root, "env": env, "timeout": 60, "creationflags": subprocess.CREATE_NO_WINDOW}
-        subprocess.run([str(exe), "--smoke-gui"], check=True, **kwargs)
+        subprocess.run([str(exe), "--smoke-gui", "--smoke-gui-report", str(root / "gui.json")], check=True, **kwargs)
+        gui = json.loads((root / "gui.json").read_text(encoding="utf-8"))
+        assert gui["fonts"]["resolved"]["bundled"], "EXE used a system fallback instead of its bundled fonts"
+        assert gui["fonts"]["actual"]["body"]["family"].casefold() == "open sans"
+        assert gui["fonts"]["actual"]["heading"]["family"].casefold() == "open sans semibold"
+        assert gui["fonts"]["actual"]["button"]["family"].casefold() == "open sans semibold"
+        assert all(font["family"].casefold() == "open sans" for font in gui["fonts"]["widgets"].values())
+        expected_height = round(40 * gui["scale"])
+        assert all(height == expected_height for height in gui["heights"].values()), gui["heights"]
+        assert all(height == expected_height for height in gui["actual_heights"].values()), gui["actual_heights"]
+        assert gui["radii"] == {"button": 4, "input": 5, "card": 8}
+        assert gui["states"]["Primary.TButton"]["disabled active pressed"] == "#f5f6f8"
+        assert gui["states"]["Primary.TButton"]["pressed active"] == "#4f0096"
         source = root / "source.sql"
         source.write_text("CREATE TABLE public.item(sys_id bigint, item text, proddescr text, volume numeric); INSERT INTO public.item VALUES (789,'PRIVATE_CODE','PRIVATE_DESCRIPTION',12345.678901);", encoding="utf-8")
         subprocess.run([str(exe), "--input", str(source), "--output", str(root / "out"), "--project", str(root / "client.snpanon"), "--industry", "chem"], check=True, **kwargs)
@@ -51,7 +63,7 @@ def check(exe):
             worksheet = ET.fromstring(book.read("xl/worksheets/sheet1.xml"))
             assert not list(worksheet.iter("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}f"))
             assert "=1+1" in "".join(worksheet.itertext())
-        print("EXE smoke: GUI, pipeline, skip isolation, UNIQUE NULLS and text-only XLSX passed; no Python on child PATH")
+        print("EXE smoke: bundled Open Sans, DS states/heights/radii, pipeline, skip isolation, UNIQUE NULLS and text-only XLSX passed; no Python on child PATH")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,31 @@
+{
+  "source": "https://github.com/googlefonts/opensans",
+  "revision": "bd7e37632246368c60fdcbd374dbf9bad11969b6",
+  "license": "SIL Open Font License 1.1",
+  "files": [
+    {
+      "name": "OpenSans-Regular.ttf",
+      "source_url": "https://raw.githubusercontent.com/googlefonts/opensans/bd7e37632246368c60fdcbd374dbf9bad11969b6/fonts/ttf/OpenSans-Regular.ttf",
+      "sha256": "c53aceea2dcf5b4098099c0c4d0a061d17e178a049317b42a422b1a9f7f8eb59",
+      "bytes": 147528
+    },
+    {
+      "name": "OpenSans-SemiBold.ttf",
+      "source_url": "https://raw.githubusercontent.com/googlefonts/opensans/bd7e37632246368c60fdcbd374dbf9bad11969b6/fonts/ttf/OpenSans-SemiBold.ttf",
+      "sha256": "4a413711684a9dd564ef0f1c10cb62b5d9f7eb6df2cff962f5341a6ecd5f64ae",
+      "bytes": 150592
+    },
+    {
+      "name": "OpenSans-Bold.ttf",
+      "source_url": "https://raw.githubusercontent.com/googlefonts/opensans/bd7e37632246368c60fdcbd374dbf9bad11969b6/fonts/ttf/OpenSans-Bold.ttf",
+      "sha256": "27da758f4dcac9a65abe914c13b463b42982b9909bc65713424099f4810bd1e6",
+      "bytes": 147264
+    },
+    {
+      "name": "OFL.txt",
+      "source_url": "https://raw.githubusercontent.com/googlefonts/opensans/bd7e37632246368c60fdcbd374dbf9bad11969b6/OFL.txt",
+      "sha256": "01cd5ffb3a528c219a86e49a814c6c53bd8a69b9a3c305dd237074ba1c811af7",
+      "bytes": 4216
+    }
+  ]
+}

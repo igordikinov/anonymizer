@@ -12,6 +12,9 @@ import pytest
 
 @pytest.fixture(scope="session")
 def tk_root():
+    from anonymizer.fonts import prepare_gui
+
+    prepare_gui()
     try:
         root = tk.Tk()
         root.update()
