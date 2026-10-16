@@ -1,4 +1,4 @@
-"""Integration: full pipeline load into the local test PostgreSQL (anonymizer-es8).
+r"""Integration: full pipeline load into the local test PostgreSQL (anonymizer-es8).
 
 Requires the scratch cluster from C:\pg-test (initdb -A trust, port 54329, db snp_test).
 Tests skip automatically when the cluster is not running. Synthetic data only.
@@ -79,6 +79,8 @@ def test_load_full_pipeline_into_schema(cluster, tmp_path):
     output = tmp_path / "out"
     report = run(Options(src, output, tmp_path / "synthetic.snpanon", pg=pg_options()))
     assert report["pg_load"] == {"schema": SCHEMA, "tables": 2, "rows": 4}
+    assert report["pg_commit_status"] == "committed"
+    assert json.loads((output / "report.json").read_text(encoding="utf-8"))["pg_commit_status"] == "committed"
     assert output.is_dir()  # files published together with the successful load
     rows = query(f'SELECT a, b FROM {SCHEMA}.parent ORDER BY a')
     assert len(rows) == 2 and all("SYN" not in str(row) for row in rows)
@@ -98,22 +100,29 @@ def test_second_load_is_idempotent(cluster, tmp_path):
     assert count == 2  # truncate prevented doubling
 
 
-def test_failure_mid_load_rolls_back_database_and_publishes_nothing(cluster, tmp_path):
+@pytest.mark.parametrize("skip_error_tables", [False, True])
+def test_failure_mid_load_rolls_back_database_and_publishes_nothing(cluster, tmp_path, skip_error_tables):
     ensure_tables()
     src = tmp_path / "source.sql"
     src.write_text(SOURCE, encoding="utf-8")
-    before = query(f"SELECT count(*) FROM {SCHEMA}.child")[0][0]
     # A CHECK the preserved measures violate makes COPY fail after TRUNCATE, mid-transaction.
     connection = psycopg2.connect(host=PG["host"], port=PG["port"], dbname=PG["dbname"], user=PG["user"])
     with connection, connection.cursor() as cursor:
         cursor.execute(f"ALTER TABLE {SCHEMA}.child DROP CONSTRAINT IF EXISTS guard_chk")
+        cursor.execute(f"TRUNCATE {SCHEMA}.parent, {SCHEMA}.child RESTART IDENTITY")
+        cursor.execute(f"INSERT INTO {SCHEMA}.parent(a,b) VALUES ('OLD_PARENT', 17)")
+        cursor.execute(f"INSERT INTO {SCHEMA}.child(x,y,note) VALUES ('OLD_PARENT', 19, 'OLD_NOTE')")
         # NOT VALID: existing rows are untouched; each COPY-inserted row is checked.
         cursor.execute(f"ALTER TABLE {SCHEMA}.child ADD CONSTRAINT guard_chk CHECK (y < 0) NOT VALID")
     connection.close()
+    before_parent = query(f"SELECT * FROM {SCHEMA}.parent ORDER BY sys_id")
+    before_child = query(f"SELECT * FROM {SCHEMA}.child ORDER BY sys_id")
     with pytest.raises(AnonymizerError, match="отменена"):
-        run(Options(src, tmp_path / "out", tmp_path / "synthetic.snpanon", pg=pg_options()))
+        run(Options(src, tmp_path / "out", tmp_path / "synthetic.snpanon", pg=pg_options(),
+                    skip_error_tables=skip_error_tables))
     assert not (tmp_path / "out").exists()
-    assert query(f"SELECT count(*) FROM {SCHEMA}.child")[0][0] == before  # TRUNCATE rolled back
+    assert query(f"SELECT * FROM {SCHEMA}.parent ORDER BY sys_id") == before_parent
+    assert query(f"SELECT * FROM {SCHEMA}.child ORDER BY sys_id") == before_child
     connection = psycopg2.connect(host=PG["host"], port=PG["port"], dbname=PG["dbname"], user=PG["user"])
     with connection, connection.cursor() as cursor:
         cursor.execute(f"ALTER TABLE {SCHEMA}.child DROP CONSTRAINT guard_chk")
@@ -122,6 +131,7 @@ def test_failure_mid_load_rolls_back_database_and_publishes_nothing(cluster, tmp
 
 def test_missing_target_table_blocks(cluster, tmp_path):
     ensure_tables()
+    before_parent = query(f"SELECT * FROM {SCHEMA}.parent ORDER BY sys_id")
     src = tmp_path / "source.sql"
     src.write_text(SOURCE, encoding="utf-8")
     connection = psycopg2.connect(host=PG["host"], port=PG["port"], dbname=PG["dbname"], user=PG["user"])
@@ -131,4 +141,4 @@ def test_missing_target_table_blocks(cluster, tmp_path):
     with pytest.raises(AnonymizerError, match="нет таблиц датасета: child"):
         run(Options(src, tmp_path / "out", tmp_path / "synthetic.snpanon", pg=pg_options()))
     assert not (tmp_path / "out").exists()
-    assert query(f"SELECT count(*) FROM {SCHEMA}.parent")[0][0] == 2  # untouched
+    assert query(f"SELECT * FROM {SCHEMA}.parent ORDER BY sys_id") == before_parent

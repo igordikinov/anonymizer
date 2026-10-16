@@ -4,6 +4,7 @@ The loader consumes the staged dump.sql COPY sections — the same transformed
 rows the file package contains — so tests build a synthetic dump fixture.
 """
 import sys
+import re
 
 import pytest
 
@@ -38,6 +39,9 @@ class FakeCursor:
         self.owner.executed.append((sql.strip(), params))
         if "information_schema.tables" in sql:
             self.owner.results.append([(name,) for name in self.owner.existing_tables])
+        if sql.startswith("TRUNCATE TABLE"):
+            for name in re.findall(r'"[^" ]+"\."([^" ]+)"', sql):
+                self.owner.pending[name] = []
 
     def fetchall(self):
         return self.owner.results.pop(0)
@@ -47,6 +51,8 @@ class FakeCursor:
         self.owner.copied.append((sql.strip(), data.decode("utf-8")))
         if self.owner.fail_on_copy:
             raise RuntimeError("simulated COPY failure")
+        table = re.search(r'COPY "[^" ]+"\."([^" ]+)"', sql).group(1)
+        self.owner.pending[table].extend(data.decode("utf-8").splitlines())
 
 
 class FakeConnection:
@@ -59,21 +65,30 @@ class FakeConnection:
 
     def commit(self):
         self.owner.commits += 1
+        if not self.owner.commit_error or self.owner.commit_applied:
+            self.owner.rows = {name: list(rows) for name, rows in self.owner.pending.items()}
+        if self.owner.commit_error:
+            raise self.owner.commit_error
 
     def rollback(self):
         self.owner.rollbacks += 1
+        self.owner.pending = {name: list(rows) for name, rows in self.owner.rows.items()}
 
     def close(self):
         self.owner.closed += 1
 
 
 class FakePsycopg2:
-    def __init__(self, existing_tables=(), fail_on_copy=False, fail_connect=None):
+    def __init__(self, existing_tables=(), fail_on_copy=False, fail_connect=None,
+                 commit_error=None, commit_applied=False):
         self.existing_tables, self.fail_on_copy, self.fail_connect = set(existing_tables), fail_on_copy, fail_connect
         self.connect_kwargs = {}
         self.executed, self.results, self.copied = [], [], []
         self.commits = self.rollbacks = self.closed = 0
         self.cursor_class = FakeCursor
+        self.rows = {name: [f"OLD_{name}"] for name in self.existing_tables}
+        self.pending = {name: list(rows) for name, rows in self.rows.items()}
+        self.commit_error, self.commit_applied = commit_error, commit_applied
 
     def connect(self, **kwargs):
         self.connect_kwargs.update(kwargs)
@@ -152,6 +167,53 @@ def test_copy_failure_rolls_back(dump, monkeypatch):
     with pytest.raises(AnonymizerError, match="отменена"):
         pg_loader.load(tables(), dump, pg_options())
     assert fake.rollbacks == 1 and fake.commits == 0
+
+
+def test_copy_failure_with_skip_preserves_all_existing_rows(dump, monkeypatch):
+    class FailChildCursor(FakeCursor):
+        def copy_expert(self, sql, stream, size=0):
+            super().copy_expert(sql, stream, size)
+            if '"child"' in sql:
+                raise RuntimeError("synthetic failure after parent and child COPY")
+
+    fake = install(FakePsycopg2(existing_tables={"parent", "child"}), monkeypatch)
+    fake.cursor_class = FailChildCursor
+    before = {name: list(rows) for name, rows in fake.rows.items()}
+    with pytest.raises(AnonymizerError, match="отменена"):
+        pg_loader.load(tables(), dump, pg_options(), skip_failed_tables=True)
+    assert fake.rows == before and fake.pending == before
+    assert fake.rollbacks == 1 and fake.commits == 0
+
+
+def test_before_commit_runs_after_copy_and_failure_rolls_back(dump, monkeypatch):
+    fake = install(FakePsycopg2(existing_tables={"parent", "child"}), monkeypatch)
+    before = {name: list(rows) for name, rows in fake.rows.items()}
+
+    def fail_publication(summary, skipped):
+        assert summary == {"schema": "public_5", "tables": 2, "rows": 3}
+        assert skipped == [] and len(fake.copied) == 2 and fake.commits == 0
+        assert fake.rows == before and fake.pending != before
+        raise AnonymizerError("synthetic local publication failure")
+
+    with pytest.raises(AnonymizerError, match="publication failure"):
+        pg_loader.load(tables(), dump, pg_options(), before_commit=fail_publication)
+    assert fake.rows == before and fake.rollbacks == 1 and fake.commits == 0
+
+
+@pytest.mark.parametrize("commit_applied", [False, True])
+def test_commit_failure_reports_unknown_outcome(dump, monkeypatch, commit_applied):
+    from anonymizer.errors import PgCommitUncertain
+
+    fake = install(FakePsycopg2(existing_tables={"parent", "child"},
+                              commit_error=RuntimeError("SECRET_PASSWORD db.host.internal"),
+                              commit_applied=commit_applied), monkeypatch)
+    before = {name: list(rows) for name, rows in fake.rows.items()}
+    with pytest.raises(PgCommitUncertain) as error:
+        pg_loader.load(tables(), dump, pg_options())
+    assert fake.commits == 1
+    assert (fake.rows != before) == commit_applied
+    assert "SECRET_PASSWORD" not in str(error.value) and "db.host.internal" not in str(error.value)
+    assert "не изменено" not in str(error.value)
 
 
 def test_dump_missing_a_table_section_is_rejected(dump, monkeypatch):

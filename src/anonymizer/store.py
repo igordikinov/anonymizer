@@ -21,6 +21,7 @@ class Store:
         self.dropped_tables: list[tuple[str, str]] = []  # (schema.table, причина)
         self._dropped_names: set = set()
         self.count, self.batch, self.batch_bytes = 0, [], 0
+        self._next_table_id = 1
 
     def define(self, name, fields, fk_groups=(), key_groups=(), from_model=False):
         if name in self._dropped_names:
@@ -43,7 +44,9 @@ class Store:
             descriptor = {"columns": model_grain, "kind": "model_bk", "nulls": "distinct"}
             if descriptor not in keys:
                 keys.append(descriptor)
-        tid = len(self.tables) + 1
+        # Dropping a table must not reuse the ID of another live table.
+        tid = self._next_table_id
+        self._next_table_id += 1
         self.tables[name] = {"id": tid, "fields": [self.model.enrich(name[1], f) for f in fields], "rows": 0,
                              "fk_groups": groups, "key_groups": keys, "from_model": from_model}
 

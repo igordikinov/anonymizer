@@ -11,7 +11,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from . import __version__
 from . import ds_tokens as ds
-from .errors import AnonymizerError, Cancelled
+from .errors import AnonymizerError, Cancelled, PgCommitUncertain
 from .help_text import show_help
 from .mapping import INDUSTRIES
 from .pipeline import Options, PgOptions, run
@@ -186,7 +186,7 @@ class Application:
         control.grid(row=5, column=2, columnspan=2, sticky="ew", padx=(6, 0), pady=4)
         self.controls.extend([entry, control])
         ttk.Label(card, text="Файл содержит исходные значения: храните его отдельно, получателям данных не передавайте.", style="Hint.TLabel").grid(row=6, column=0, columnspan=4, sticky="w", pady=(8, 0))
-        skip_check = ttk.Checkbutton(card, text="Пропускать таблицы с ошибками (продолжить обработку остальных; причины — в журнале)",
+        skip_check = ttk.Checkbutton(card, text="Пропускать таблицы с ошибками входа (причины — в журнале; загрузка в базу всегда целиком)",
                                      variable=self.skip_error_tables)
         skip_check.grid(row=7, column=0, columnspan=4, sticky="w", pady=(8, 0))
         self.controls.append(skip_check)
@@ -225,7 +225,7 @@ class Application:
             entry.grid(row=grid_row, column=grid_col + 1, sticky="ew", pady=3, padx=(0, 18))
             self.pg_entries.append(entry)
             self.controls.append(entry)
-        ttk.Label(self.pg_frame, text="Таблицы датасета должны существовать в целевой схеме. Сбой — полный откат, база не меняется.\nПароль не сохраняется и не попадает в отчёт.", style="Hint.TLabel").grid(row=3, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        ttk.Label(self.pg_frame, text="Таблицы датасета должны существовать в целевой схеме. Ошибка до фиксации — откат всего набора.\nПри потере подтверждения фиксации нужно проверить базу. Пароль не сохраняется.", style="Hint.TLabel").grid(row=3, column=0, columnspan=4, sticky="w", pady=(8, 0))
         self.pg_toggle()
 
         # Колесо мыши прокручивает зону карточек.
@@ -375,6 +375,8 @@ class Application:
             try:
                 report = run(options, progress, self.cancel)
                 self.events.put(("done", report))
+            except PgCommitUncertain as error:
+                self.events.put(("uncertain", str(error)))
             except AnonymizerError as error:
                 self.events.put(("error", str(error)))
             except Exception:
@@ -409,6 +411,12 @@ class Application:
                     loaded = f" В PostgreSQL загружено строк: {data['pg_load']['rows']:,} (схема {data['pg_load']['schema']})." if "pg_load" in data else ""
                     self.result.set(f"Проверены доступные связи, бизнес-ключи и сохраняемые поля. Предупреждений по ссылкам: {missing}.{loaded} Отчёт — report.json.")
                     self.open_button.configure(state="normal")
+                elif kind == "uncertain":
+                    self.status.set("Результат COMMIT PostgreSQL не подтверждён")
+                    self.result.set(data + " Подробности — в журнале прогона.")
+                    self.open_button.configure(state="normal")
+                    if not self.pending_close:
+                        messagebox.showwarning("PostgreSQL", data)
                 else:
                     self.status.set("Итоговый пакет не создан")
                     self.result.set(data + " Журнал прогона доступен кнопкой «Выгрузить журнал (CSV)».")
@@ -427,7 +435,7 @@ class Application:
         if self.running:
             self.pending_close = True
             self.cancel.set()
-            self.status.set("Отмена и удаление временных данных…")
+            self.status.set("Отмена запрошена. Ожидаем завершения текущей операции…")
         else:
             self.root.destroy()
 

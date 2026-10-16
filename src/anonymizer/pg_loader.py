@@ -6,14 +6,16 @@ validated rows with dump.sql escaping and no sys_id, so the database receives
 exactly what the file package contains. One transaction: verify every dataset
 table exists in the target schema, TRUNCATE exactly those tables (RESTART
 IDENTITY, no CASCADE), stream each dump COPY section to the server, COMMIT.
-Any failure rolls the database back; the caller then refuses to publish.
+COPY failures roll the whole dataset back, including when input-table skipping
+is enabled. before_commit publishes prepared local artifacts before COMMIT.
+An exception during COMMIT has an unknown outcome and must retain those artifacts.
 """
 from __future__ import annotations
 
 import io
 import re
 
-from .errors import AnonymizerError, Cancelled
+from .errors import AnonymizerError, PgCommitUncertain
 from .metadata import quote
 
 CONNECT_TIMEOUT = 10
@@ -54,7 +56,7 @@ class _SectionReader(io.RawIOBase):
 def _quiet_rollback(connection):
     try:
         connection.rollback()
-    except Exception:
+    except BaseException:
         pass  # a broken connection has nothing left to roll back
 
 
@@ -73,8 +75,13 @@ def connect(pg, psycopg2):
     return connection
 
 
-def load(tables, dump_path, pg, progress=lambda done: None, check=lambda: None, skip_failed_tables=False):
-    """Loads every dataset table into pg.schema; returns (summary, skipped tables)."""
+def load(tables, dump_path, pg, progress=lambda done: None, check=lambda: None,
+         skip_failed_tables=False, before_commit=None):
+    """Load one atomic dataset, publish via before_commit, then commit last.
+
+    skip_failed_tables remains accepted for API compatibility; PG errors always
+    abort the complete transaction. Input-table skipping belongs to the readers.
+    """
     try:
         import psycopg2
     except ImportError:
@@ -85,8 +92,8 @@ def load(tables, dump_path, pg, progress=lambda done: None, check=lambda: None, 
     if len(names) != len(tables):
         raise AnonymizerError("Таблица с одинаковым именем встречается в нескольких схемах датасета; "
                               "загрузка в одну целевую схему невозможна без переименования.")
+    check()
     connection = connect(pg, psycopg2)
-    skipped = []
     try:
         with connection.cursor() as cursor:
             cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {quote(pg.schema)}")
@@ -111,29 +118,13 @@ def load(tables, dump_path, pg, progress=lambda done: None, check=lambda: None, 
                                  .replace(f'"{match.group(1)}".', f'{quote(pg.schema)}.', 1)
                                  .rstrip(";"))
                     section = _SectionReader(stream, check)
-                    savepoint = f"snp_table_{match.group(2)}"
                     with connection.cursor() as cursor:
-                        cursor.execute(f"SAVEPOINT {quote(savepoint)}")
                         try:
                             cursor.copy_expert(statement, section, size=8 * 1024 * 1024)
-                        except Cancelled:
-                            raise  # отмена — не табличная ошибка; частичные данные не коммитятся
-                        except Exception as error:
-                            # psycopg2 оборачивает исключение из стримера (check() -> Cancelled)
-                            # в QueryCanceled: единственный способ узнать об отмене — спросить снова.
+                        except Exception:
+                            # psycopg2 can wrap Cancelled raised by the streamer.
                             check()
-                            if not skip_failed_tables:
-                                raise
-                            cursor.execute(f"ROLLBACK TO SAVEPOINT {quote(savepoint)}")
-                            skipped.append({"table": match.group(2),
-                                            "reason": f"загрузка не удалась ({type(error).__name__}); таблица пропущена"})
-                            copied.add(match.group(2))  # таблица обработана (пропущена осознанно)
-                            if not section.done:  # секция могла быть прочитана до конца до отказа сервера
-                                while True:
-                                    rest = stream.readline()
-                                    if not rest or rest.rstrip("\r\n") == "\\.": break
-                            header = stream.readline()
-                            continue
+                            raise
                     copied.add(match.group(2))
                     total += section.count
                     progress(total)
@@ -142,11 +133,21 @@ def load(tables, dump_path, pg, progress=lambda done: None, check=lambda: None, 
                     header = stream.readline()
         if copied != names or total == 0:
             raise AnonymizerError("В дампе не найдены секции COPY всех таблиц датасета; загрузка отменена.")
-        connection.commit()
         summary = {"schema": pg.schema, "tables": len(names), "rows": total}
-        if skipped:
-            summary["skipped"] = skipped
-        return summary, skipped
+        check()
+        if before_commit is not None:
+            before_commit(summary, [])
+        check()  # last cancellation boundary; never promise rollback after COMMIT
+        try:
+            connection.commit()
+        except BaseException as error:
+            # Ctrl+C/SystemExit cannot establish whether the server committed
+            # either. Preserve the same evidence as for a lost network reply.
+            raise PgCommitUncertain(
+                f"Результат COMMIT PostgreSQL не подтверждён ({type(error).__name__}). "
+                "Проверьте состояние целевой базы перед повторной загрузкой. "
+                "Подготовленный пакет, проект и карта замен сохранены.") from None
+        return summary, []
     except AnonymizerError:
         _quiet_rollback(connection)
         raise
@@ -157,5 +158,7 @@ def load(tables, dump_path, pg, progress=lambda done: None, check=lambda: None, 
     finally:
         try:
             connection.close()
-        except Exception:
+        except BaseException:
+            # Cleanup must not hide a successful/uncertain COMMIT (or replace
+            # the original failure) with a late user interruption.
             pass

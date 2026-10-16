@@ -4,3 +4,7 @@ class AnonymizerError(Exception):
 
 class Cancelled(AnonymizerError):
     pass
+
+
+class PgCommitUncertain(AnonymizerError):
+    """COMMIT was attempted; the server outcome cannot safely be inferred."""

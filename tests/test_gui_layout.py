@@ -83,6 +83,7 @@ def test_journal_export_button(tmp_path, tk_root, monkeypatch):
     target = tmp_path / "exported.csv"
     from anonymizer.gui import filedialog
 
+    monkeypatch.setattr("anonymizer.gui.messagebox.showinfo", lambda *args: None)
     monkeypatch.setattr(filedialog, "asksaveasfilename", lambda **kwargs: str(target))
     app.export_log()
     assert target.is_file()
@@ -90,3 +91,19 @@ def test_journal_export_button(tmp_path, tk_root, monkeypatch):
     assert rows[0].startswith("время;") and rows[1].endswith("synthetic entry")
     monkeypatch.setattr(filedialog, "asksaveasfilename", lambda **kwargs: "")  # диалог отменён
     app.export_log()
+
+
+def test_uncertain_commit_keeps_result_accessible(tk_root, monkeypatch):
+    fresh_surface(tk_root)
+    app = Application(tk_root)
+    warnings = []
+    monkeypatch.setattr("anonymizer.gui.messagebox.showwarning", lambda *args: warnings.append(args))
+    app.running = True
+    app.events.put(("uncertain", "Пакет, проект и карта замен сохранены; проверьте PostgreSQL."))
+    app._poll_once()
+    assert not app.running
+    assert "не подтверждён" in app.status.get()
+    assert "сохранены" in app.result.get()
+    assert "не создан" not in app.result.get()
+    assert app.open_button.instate(["!disabled"])
+    assert warnings

@@ -48,6 +48,7 @@ def write_mapping_xlsx(path, rows, check=lambda: None):
     """rows: iterable of (domain, old, new); returns the number of data rows."""
     try:
         from openpyxl import Workbook
+        from openpyxl.cell import WriteOnlyCell
     except ImportError:
         raise AnonymizerError("Библиотека Excel не установлена. Пересоберите приложение или установите openpyxl.") from None
     workbook = Workbook(write_only=True)
@@ -62,7 +63,14 @@ def write_mapping_xlsx(path, rows, check=lambda: None):
                 sheets.append(sheet)
                 sheet.append(HEADER)
                 written = 0
-            sheet.append((cell_value(domain), cell_value(old), cell_value(new)))
+            cells = []
+            for value in (domain, old, new):
+                cell = WriteOnlyCell(sheet, value=cell_value(value))
+                # Values are data, including strings that Excel would infer as
+                # formulas or errors (e.g. '=1+1' and '#N/A').
+                cell.data_type = "s"
+                cells.append(cell)
+            sheet.append(cells)
             written += 1
             total += 1
         if sheet is None:

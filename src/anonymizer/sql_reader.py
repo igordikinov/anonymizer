@@ -438,18 +438,24 @@ def reference(tokens, schema, lexer):
     return schema, table, columns
 
 
-def parse_nulls_tail(tokens, start, lexer):
-    """Positional scan of a key-constraint tail: NULLS [NOT] DISTINCT, INCLUDE."""
+def parse_unique_nulls(tokens, start, lexer):
+    """Read NULLS only immediately after UNIQUE; return semantics and next index."""
+    if start < len(tokens) and tokens[start].is_("NULLS"):
+        if start + 2 < len(tokens) and tokens[start+1].is_("NOT") and tokens[start+2].is_("DISTINCT"):
+            return "not distinct", start + 3
+        if start + 1 < len(tokens) and tokens[start+1].is_("DISTINCT"):
+            return "distinct", start + 2
+        lexer.fail("Неподдерживаемое уточнение NULLS")
+    return "distinct", start
+
+
+def reject_key_tail(tokens, start, lexer):
+    """Reject misplaced NULLS and unsupported INCLUDE throughout the tail."""
     for i in range(start, len(tokens)):
         if tokens[i].is_("NULLS"):
-            if i + 2 < len(tokens) and tokens[i+1].is_("NOT") and tokens[i+2].is_("DISTINCT"):
-                return "not distinct"
-            if i + 1 < len(tokens) and tokens[i+1].is_("DISTINCT"):
-                return "distinct"
-            lexer.fail("Неподдерживаемое уточнение NULLS")
+            lexer.fail("Уточнение NULLS допускается только сразу после UNIQUE")
         if tokens[i].is_("INCLUDE"):
             lexer.fail("UNIQUE INCLUDE не поддерживается; переизвлеките данные без INCLUDE")
-    return "distinct"
 
 
 def apply_column_constraints(field, tokens, schema, lexer):
@@ -463,12 +469,13 @@ def apply_column_constraints(field, tokens, schema, lexer):
     unique = next((i for i, t in enumerate(tokens) if t.is_("UNIQUE")), None)
     if primary is not None:
         field.update(keys=["PK"], source_pk=True, nullable=False)
-        if parse_nulls_tail(tokens, primary + 1, lexer) != "distinct":
-            lexer.fail("PRIMARY KEY не принимает NULLS NOT DISTINCT")
+        reject_key_tail(tokens, primary + 1, lexer)
         key = {"columns": [field["name"]], "kind": "pk", "nulls": "distinct"}
     elif unique is not None:
         field.update(keys=["UK"])
-        key = {"columns": [field["name"]], "kind": "unique", "nulls": parse_nulls_tail(tokens, unique + 1, lexer)}
+        nulls, end = parse_unique_nulls(tokens, unique + 1, lexer)
+        reject_key_tail(tokens, end, lexer)
+        key = {"columns": [field["name"]], "kind": "unique", "nulls": nulls}
     if any(t.is_("REFERENCES") for t in tokens):
         target_schema, target_table, columns = reference(tokens, schema, lexer)
         if len(columns) != 1:
@@ -489,11 +496,12 @@ def apply_table_constraint(fields, tokens, schema, lexer):
         return [], []
     if tokens[0].is_("PRIMARY") or tokens[0].is_("UNIQUE"):
         start = 2 if tokens[0].is_("PRIMARY") else 1
-        columns, end = token_columns(tokens, start, lexer)
         kind = "pk" if tokens[0].is_("PRIMARY") else "unique"
-        nulls = parse_nulls_tail(tokens, end + 1, lexer)
-        if kind == "pk" and nulls != "distinct":
-            lexer.fail("PRIMARY KEY не принимает NULLS NOT DISTINCT")
+        nulls = "distinct"
+        if kind == "unique":
+            nulls, start = parse_unique_nulls(tokens, start, lexer)
+        columns, end = token_columns(tokens, start, lexer)
+        reject_key_tail(tokens, end + 1, lexer)
         for col in columns:
             if col not in bycol:
                 lexer.fail("Ключ ссылается на отсутствующую колонку")

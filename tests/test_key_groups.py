@@ -56,8 +56,9 @@ def test_pk_marks_column_not_null_so_null_rows_are_rejected(tmp_path, ddl):
 
 @pytest.mark.parametrize("ddl", [
     "CREATE TABLE public.t(a text UNIQUE NULLS NOT DISTINCT)",
-    "CREATE TABLE public.t(a text, UNIQUE (a) NULLS NOT DISTINCT)",
-], ids=["column-level", "table-level"])
+    "CREATE TABLE public.t(a text, UNIQUE NULLS NOT DISTINCT (a))",
+    "CREATE TABLE public.t(a text); ALTER TABLE public.t ADD CONSTRAINT uq UNIQUE NULLS NOT DISTINCT (a)",
+], ids=["column-level", "table-level", "alter"])
 def test_nulls_not_distinct_counts_null_duplicates(tmp_path, ddl):
     src = tmp_path / "source.sql"
     src.write_text(ddl + "; INSERT INTO public.t VALUES (NULL),(NULL),('SYN_A');", encoding="utf-8")
@@ -70,13 +71,61 @@ def test_nulls_not_distinct_counts_null_duplicates(tmp_path, ddl):
 def test_nulls_distinct_explicit_and_empty_string_is_a_value(tmp_path):
     src = tmp_path / "source.sql"
     src.write_text("""
-      CREATE TABLE public.t(a text, UNIQUE (a) NULLS DISTINCT);
+      CREATE TABLE public.t(a text, UNIQUE NULLS DISTINCT (a));
       INSERT INTO public.t VALUES (NULL),(NULL),(''),(''),('SYN_A');
     """, encoding="utf-8")
     report = run(Options(src, tmp_path / "out", tmp_path / "synthetic.snpanon"))
     (group,) = report["validation"]["business_key_duplicates"]
     assert group["nulls"] == "distinct"
     assert group["extra_rows_before"] == group["extra_rows_after"] == 1  # the '' pair; NULLs do not count
+
+
+@pytest.mark.parametrize("nulls", ["DISTINCT", "NOT DISTINCT"])
+@pytest.mark.parametrize("form", ["column", "create", "alter"])
+def test_unique_nulls_position_preserves_semantics(tmp_path, nulls, form):
+    if form == "column":
+        ddl = f"CREATE TABLE public.t(a text UNIQUE NULLS {nulls});"
+    elif form == "create":
+        ddl = f"CREATE TABLE public.t(a text, CONSTRAINT uq UNIQUE NULLS {nulls} (a));"
+    else:
+        ddl = f"CREATE TABLE public.t(a text); ALTER TABLE ONLY public.t ADD CONSTRAINT uq UNIQUE NULLS {nulls} (a);"
+    src = tmp_path / "source.sql"
+    src.write_text(ddl, encoding="utf-8")
+    with Store(tmp_path / "read.sqlite", Model()) as store:
+        parse_sql(src, store)
+        assert store.tables[("public", "t")]["key_groups"] == [
+            {"columns": ["a"], "kind": "unique", "nulls": nulls.lower()}
+        ]
+
+
+@pytest.mark.parametrize("nulls", ["DISTINCT", "NOT DISTINCT"])
+@pytest.mark.parametrize("form", ["create", "alter"])
+def test_unique_nulls_postfix_is_rejected(tmp_path, nulls, form):
+    constraint = f"UNIQUE (a) NULLS {nulls}"
+    ddl = (f"CREATE TABLE public.t(a text, {constraint});" if form == "create" else
+           f"CREATE TABLE public.t(a text); ALTER TABLE public.t ADD CONSTRAINT uq {constraint};")
+    src = tmp_path / "source.sql"
+    src.write_text(ddl, encoding="utf-8")
+    with Store(tmp_path / "read.sqlite", Model()) as store:
+        with pytest.raises(AnonymizerError, match="NULLS"):
+            parse_sql(src, store)
+
+
+@pytest.mark.parametrize("ddl", [
+    "CREATE TABLE public.t(a text UNIQUE NULLS NOT DISTINCT INCLUDE (b), b text);",
+    "CREATE TABLE public.t(a text, b text, UNIQUE NULLS NOT DISTINCT (a) INCLUDE (b));",
+    "CREATE TABLE public.t(a text, b text); ALTER TABLE public.t ADD CONSTRAINT uq UNIQUE NULLS DISTINCT (a) INCLUDE (b);",
+    "CREATE TABLE public.t(a text UNIQUE NOT NULL NULLS NOT DISTINCT);",
+    "CREATE TABLE public.t(a text UNIQUE NULLS DISTINCT NULLS NOT DISTINCT);",
+    "CREATE TABLE public.t(a text, UNIQUE NULLS NOT (a));",
+    "CREATE TABLE public.t(a text PRIMARY KEY NULLS DISTINCT);",
+])
+def test_unique_nulls_unsupported_or_malformed_forms_are_rejected(tmp_path, ddl):
+    src = tmp_path / "source.sql"
+    src.write_text(ddl, encoding="utf-8")
+    with Store(tmp_path / "read.sqlite", Model()) as store:
+        with pytest.raises(AnonymizerError):
+            parse_sql(src, store)
 
 
 def test_include_is_rejected_without_output(tmp_path):
@@ -162,7 +211,7 @@ def test_key_tuples_spool_to_sqlite_within_byte_budget(tmp_path):
 def test_manifest_roundtrip_preserves_key_groups_and_legacy_stays_valid(tmp_path):
     src = tmp_path / "source.sql"
     src.write_text("""
-      CREATE TABLE public.t(a text UNIQUE, b text, UNIQUE (a,b) NULLS NOT DISTINCT);
+      CREATE TABLE public.t(a text UNIQUE, b text, UNIQUE NULLS NOT DISTINCT (a,b));
       INSERT INTO public.t VALUES ('SYN_A','SYN_B');
     """, encoding="utf-8")
     output = tmp_path / "out"

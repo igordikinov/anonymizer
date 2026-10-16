@@ -119,6 +119,19 @@ def test_cell_value_truncates_and_cleans_control_characters():
     assert len(result) <= 32_000 and result.endswith("…[усечено]")
 
 
+@pytest.mark.parametrize("value", ["=1+1", "#N/A", "+123", "@SUM(A1)", "-123", "00123"])
+def test_mapping_cells_preserve_values_as_text(tmp_path, value):
+    target = tmp_path / "text.xlsx"
+    write_mapping_xlsx(target, [(value, value, value)])
+    book = load_workbook(target, read_only=True, data_only=False)
+    try:
+        (header, row) = list(book.active.iter_rows())
+        assert all(cell.data_type == "s" for cell in (*header, *row))
+        assert [cell.value for cell in row] == [value, value, value]
+    finally:
+        book.close()
+
+
 def test_sheet_rollover_on_overflow(tmp_path):
     rows = ((f"domain{i}", f"old{i}", f"new{i}") for i in range(25))
     target = tmp_path / "overflow.xlsx"

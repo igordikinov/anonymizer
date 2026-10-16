@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import tempfile
 from dataclasses import dataclass
@@ -10,7 +11,7 @@ from threading import Event
 
 from . import __version__
 from .csv_reader import parse_csv
-from .errors import AnonymizerError, Cancelled
+from .errors import AnonymizerError, Cancelled, PgCommitUncertain
 from .exporters import Exporter
 from .mapping import Project, Transformer
 from .mapping_export import write_mapping_xlsx
@@ -82,7 +83,8 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
     log.add("info", "import", "start", "", f"версия {__version__}; отрасль {options.industry}; "
             f"источник {'zip' if source.suffix.lower() == '.zip' else 'sql' if source.is_file() else 'csv'}")
     project, store, exporter = None, None, None
-    success = False
+    success, published, retain_output = False, False, False
+    mapping_temp = None
     output.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".snp-anon-", dir=output.parent))
 
@@ -192,19 +194,6 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                       "fields": [{"schema": schema_names[name[0]], "table": name[1], "columns": [
                           {"name": f["name"], "rule": transformer.rule(name[1], f, name[0]), "type": f["sql_type"]} for f in table["fields"]]} for name, table in store.tables.items()]}
             check()
-            if options.pg:
-                progress("pg", 0, "Загрузка в PostgreSQL")
-                pg_summary, pg_skipped = pg_load(store.tables, staging / "dump.sql", options.pg,
-                                                 progress=lambda done: progress("pg", min(done / max(store.count, 1), 1), f"Загружено строк: {done:,}"),
-                                                 check=check, skip_failed_tables=options.skip_error_tables)
-                report["pg_load"] = pg_summary
-                for item in pg_skipped:
-                    log.add("warning", "pg", "table_skipped", item["table"], item["reason"])
-                    skipped_entries.append({"table": item["table"], "stage": "pg", "reason": item["reason"]})
-                progress("pg", 1, f"Загружено строк: {report['pg_load']['rows']:,}")
-                log.add("info", "pg", "pg_load", report["pg_load"]["schema"],
-                        f"таблиц: {report['pg_load']['tables']}; строк: {report['pg_load']['rows']:,}")
-            check()
             if options.mapping_xlsx:
                 progress("mapping", 0, "Запись карты замен в Excel")
 
@@ -214,21 +203,75 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                         # the snp_ prefix; the map shows what the output contains.
                         yield (domain, old, "snp_" + str(new).lower()) if domain == "schema" else (domain, old, new)
 
-                write_mapping_xlsx(options.mapping_xlsx, mapping_rows(), check=check)
-                log.add("info", "mapping", "mapping_export", options.mapping_xlsx.name, "карта замен выгружена")
+                # Private sibling staging: never put originals into the output
+                # package and never truncate an existing map on a failed save.
+                try:
+                    mapping_temp = Path(tempfile.mkdtemp(prefix=".snp-map-", dir=options.mapping_xlsx.resolve().parent))
+                except OSError as error:
+                    raise AnonymizerError(f"Не удалось подготовить файл карты замен ({type(error).__name__}). "
+                                          "Проверьте путь и свободное место.") from None
+                write_mapping_xlsx(mapping_temp / "mapping.xlsx", mapping_rows(), check=check)
                 progress("mapping", 1, "Карта замен записана")
-            (staging / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
             check()
+            pg_tables = store.tables
             store.close()
             store = None
-        # Existing project mappings persist only after all validations have passed.
-        project.finish(True)
-        project = None
-        staging.rename(output)
+        # Spool and temporary input cleanup must also succeed before PG COMMIT.
+
+        def publish(pg_summary=None, pg_skipped=()):
+            nonlocal project, published, mapping_temp
+            if pg_summary is not None:
+                report["pg_load"] = pg_summary
+                # Written before COMMIT; remains honest even on a lost reply.
+                report["pg_commit_status"] = "not_confirmed"
+            (staging / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+            check()
+            if mapping_temp is not None:
+                os.replace(mapping_temp / "mapping.xlsx", options.mapping_xlsx)
+                mapping_temp.rmdir()
+                mapping_temp = None
+                log.add("info", "mapping", "mapping_export", options.mapping_xlsx.name, "карта замен выгружена")
+            # Persist correspondences before any DB commit can become durable.
+            # On a later local failure, extra mappings are safe to reuse.
+            project.finish(True)
+            project = None
+            check()
+            staging.rename(output)
+            published = True
+
+        if options.pg:
+            progress("pg", 0, "Загрузка в PostgreSQL")
+            pg_load(pg_tables, staging / "dump.sql", options.pg,
+                    progress=lambda done: progress("pg", min(done / max(completed, 1), 1), f"Загружено строк: {done:,}"),
+                    check=check, before_commit=publish)
+        else:
+            publish()
         success = True
-        log.add("info", "publish", "published", output.name, f"пакет опубликован; строк: {completed:,}")
-        progress("done", 1, f"Готово: {completed:,} строк")
+        # All mandatory work is complete. Reporting failures must not disguise a
+        # successful PG commit as a failed run or delete its evidence.
+        if options.pg:
+            report["pg_commit_status"] = "committed"
+            try:
+                status_file = output / ".report.json.tmp"
+                status_file.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+                status_file.replace(output / "report.json")
+            except OSError:
+                log.add("warning", "pg", "commit_status_report", "",
+                        "COMMIT подтверждён; не удалось обновить его статус в report.json.")
+                try:
+                    status_file.unlink(missing_ok=True)
+                except OSError:
+                    pass
+        try:
+            log.add("info", "publish", "published", output.name, f"пакет опубликован; строк: {completed:,}")
+            progress("done", 1, f"Готово: {completed:,} строк")
+        except Exception:
+            pass  # a notification cannot undo a completed publication/COMMIT
         return report
+    except PgCommitUncertain as error:
+        retain_output = True
+        log.add("warning", "pg", "commit_not_confirmed", "", str(error))
+        raise
     except Cancelled:
         log.add("warning", stage["current"], "cancelled", "", "Обработка отменена. Итоговый пакет не создан.")
         raise
@@ -254,5 +297,9 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
             store.close()
         if project:
             project.finish(False)
-        if not success:
+        if mapping_temp:
+            shutil.rmtree(mapping_temp, ignore_errors=True)
+        if not success and not retain_output:
             shutil.rmtree(staging, ignore_errors=True)
+            if published:
+                shutil.rmtree(output, ignore_errors=True)
