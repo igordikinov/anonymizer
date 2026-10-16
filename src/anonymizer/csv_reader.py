@@ -68,10 +68,19 @@ def _read_csv_file(store, check, entry, file, encoding, delimiter, manifest, pat
         full_header = list(header)
         header = store.ensure(name, header)
         kept_indexes = [i for i, col in enumerate(full_header) if col in set(header)]
+        # External CSV commonly uses empty cells for absent numeric values.
+        # Resolve only nullable numeric columns once, from the effective model.
+        # A table can already be dropped by ensure() for a missing business key.
+        nullable_numbers = {f["name"] for f in store.tables.get(name, {}).get("fields", ())
+                            if f["type"] in {"NUMBER", "INTEGER"} and f.get("nullable", True)} if manifest is None else set()
+        empty_as_null = {i for i, col in enumerate(full_header) if col in nullable_numbers}
         for row in reader:
             check()
             if len(row) != len(full_header):
                 raise AnonymizerError(f"CSV {entry['table']}, запись {reader.line_num}: неправильное число полей.")
-            # Explicit NULL token. Empty strings remain empty, including quoted ones.
-            values = [None if value == r"\N" else (value[1:] if manifest and value.startswith("\\\\") else value) for value in row]
+            # Keep TEXT blanks, nonempty values, and manifest escaping unchanged.
+            # csv.reader returns both quoted and unquoted empty cells as "".
+            values = [None if value == r"\N" or (value == "" and i in empty_as_null)
+                      else (value[1:] if manifest and value.startswith("\\\\") else value)
+                      for i, value in enumerate(row)]
             store.add_row(name, header, [values[i] for i in kept_indexes])

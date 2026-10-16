@@ -63,7 +63,27 @@ def check(exe):
             worksheet = ET.fromstring(book.read("xl/worksheets/sheet1.xml"))
             assert not list(worksheet.iter("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}f"))
             assert "=1+1" in "".join(worksheet.itertext())
-        print("EXE smoke: bundled Open Sans, DS states/heights/radii, pipeline, skip isolation, UNIQUE NULLS and text-only XLSX passed; no Python on child PATH")
+        csv_source = root / "csv-source"
+        csv_source.mkdir()
+        (csv_source / "sku.csv").write_text(
+            "prod_prof;item;fixhor;loc;prof_descr;fixlotsize\n"
+            'SYN_UNKNOWN_A;SYN_I1;;SYN_L;SYN_UNKNOWN_B;""\n'
+            "SYN_UNKNOWN_A;SYN_I2;0;SYN_L;SYN_UNKNOWN_B;1234567890.123456\n", encoding="utf-8")
+        subprocess.run([str(exe), "--input", str(csv_source), "--output", str(root / "csv-out"),
+                        "--project", str(root / "csv.snpanon")], check=True, **kwargs)
+        csv_report = json.loads((root / "csv-out/report.json").read_text(encoding="utf-8"))
+        assert csv_report["rows"] == 2 and csv_report["tables"] == 1 and not csv_report["skipped_tables"]
+        assert csv_report["validation"]["preserved_fields_equal"]
+        csv_manifest = json.loads((root / "csv-out/csv/manifest.json").read_text(encoding="utf-8"))
+        entry, = csv_manifest["tables"]
+        with (root / "csv-out/csv" / entry["file"]).open(encoding="utf-8", newline="") as stream:
+            csv_rows = list(csv.DictReader(stream))
+        assert [(r["fixhor"], r["fixlotsize"]) for r in csv_rows] == [(r"\N", r"\N"), ("0", "1234567890.123456")]
+        assert "prod_prof" not in csv_rows[0] and "prof_descr" not in csv_rows[0]
+        for filename in ("dump.sql", "inserts.sql"):
+            sql_text = (root / "csv-out" / filename).read_text(encoding="utf-8")
+            assert "1234567890.123456" in sql_text and "SYN_UNKNOWN_" not in sql_text
+        print("EXE smoke: bundled Open Sans, DS, pipeline, skip isolation, UNIQUE NULLS, text-only XLSX and nullable CSV numbers passed; no Python on child PATH")
 
 
 if __name__ == "__main__":
