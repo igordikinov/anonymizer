@@ -90,7 +90,7 @@ class Application:
         self.mapping_xlsx = tk.StringVar()
         self.skip_error_tables = tk.BooleanVar(value=False)
         self.runlog = RunLog()
-        self.status = tk.StringVar(value="Выберите SQL-файл или папку CSV")
+        self.status = tk.StringVar(value="Выберите SQL/XLSX, ZIP или папку CSV/XLSX")
         self.result = tk.StringVar(value="Будут созданы dump.sql, inserts.sql, csv/ и report.json")
         self.controls = []
         self.cards = []
@@ -127,7 +127,7 @@ class Application:
         canvas.bind("<Configure>", lambda event: canvas.itemconfigure(canvas_window, width=event.width))
 
         card = self.card(cards_holder, "1. Источник и результат")
-        self.path_row(card, 1, "Исходные данные", self.source, self.pick_source, "SQL…", secondary=("CSV…", self.pick_csv))
+        self.path_row(card, 1, "Исходные данные", self.source, self.pick_source, "Файл…", secondary=("Папка…", self.pick_csv))
         self.path_row(card, 2, "Папка результата", self.output, self.pick_output, "Выбрать…")
         self.path_row(card, 3, "Локальный проект", self.project, self.pick_project, "Открыть…", secondary=("Новый…", self.new_project))
         self.wrap_label(card, text="Проект содержит исходные значения и карту замен. Храните его отдельно от выдаваемого пакета.", style="Hint.TLabel").grid(row=4, column=0, columnspan=4, sticky="ew", pady=(self.px(ds.SPACE_S), 0))
@@ -293,10 +293,10 @@ class Application:
 
     def pick_source(self):
         self.select_source(filedialog.askopenfilename(filetypes=[
-            ("Выгрузка данных", "*.sql *.zip"), ("ZIP-архив", "*.zip"), ("PostgreSQL SQL", "*.sql")]))
+            ("Выгрузка данных", "*.sql *.zip *.xlsx"), ("Excel", "*.xlsx"), ("ZIP-архив", "*.zip"), ("PostgreSQL SQL", "*.sql")]))
 
     def pick_csv(self):
-        self.select_source(filedialog.askdirectory(title="Папка с CSV"))
+        self.select_source(filedialog.askdirectory(title="Папка с CSV/XLSX"))
 
     def pick_output(self):
         parent = filedialog.askdirectory(title="Родительская папка результата")

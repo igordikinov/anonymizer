@@ -10,7 +10,7 @@ from pathlib import Path
 from threading import Event
 
 from . import __version__
-from .csv_reader import parse_csv
+from .tabular_reader import parse_tabular
 from .errors import AnonymizerError, Cancelled, PgCommitUncertain
 from .exporters import Exporter
 from .mapping import Project, Transformer
@@ -53,12 +53,12 @@ class Options:
 
 def run(options: Options, progress=lambda stage, amount, message: None, cancel: Event | None = None):
     source, output, project_path = [p.resolve() for p in (options.source, options.output, options.project)]
-    if not source.exists() or (source.is_file() and source.suffix.lower() not in {".sql", ".zip"}):
-        raise AnonymizerError("Источник должен быть файлом .sql, ZIP-архивом или папкой CSV.")
+    if not source.exists() or (source.is_file() and source.suffix.lower() not in {".sql", ".zip", ".xlsx"}):
+        raise AnonymizerError("Источник должен быть файлом .sql/.xlsx, ZIP-архивом или папкой CSV/XLSX.")
     if output.exists():
         raise AnonymizerError("Папка результата уже существует. Выберите новую папку.")
     if output == source or (source.is_dir() and output.is_relative_to(source)):
-        raise AnonymizerError("Результат должен находиться вне папки исходных CSV.")
+        raise AnonymizerError("Результат должен находиться вне папки исходных CSV/XLSX.")
     if project_path == source or project_path.is_relative_to(output) or (source.is_dir() and project_path.is_relative_to(source)):
         raise AnonymizerError("Локальный проект с исходными значениями должен храниться отдельно от входа и результата.")
     if project_path.suffix != ".snpanon":
@@ -81,7 +81,7 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
         progress_cb(stage_name, amount, message)
 
     log.add("info", "import", "start", "", f"версия {__version__}; отрасль {options.industry}; "
-            f"источник {'zip' if source.suffix.lower() == '.zip' else 'sql' if source.is_file() else 'csv'}")
+            f"источник {source.suffix.lower()[1:] if source.is_file() else 'csv/xlsx'}")
     project, store, exporter = None, None, None
     success, published, retain_output = False, False, False
     mapping_temp = None
@@ -99,13 +99,14 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                 progress("import", 0, "Распаковка архива")
                 data_source = extract_dataset(source, Path(temp) / "zip", check,
                                               progress=lambda done: progress("import", 0, f"Распаковка архива: {done:,} байт"))
-            total = data_source.stat().st_size if data_source.is_file() else sum(p.stat().st_size for p in data_source.rglob("*.csv"))
+            total = data_source.stat().st_size if data_source.is_file() else sum(
+                p.stat().st_size for p in data_source.iterdir() if p.is_file() and p.suffix.lower() in {".csv", ".xlsx"})
             progress("import", 0, "Чтение и проверка структуры")
             callback = lambda n: progress("import", min(n / max(total, 1), 1), "Чтение данных")
-            if data_source.is_file():
+            if data_source.is_file() and data_source.suffix.lower() == ".sql":
                 parse_sql(data_source, store, check, options.encoding, callback, skip_error_tables=options.skip_error_tables)
             else:
-                parse_csv(data_source, store, check, options.encoding, options.delimiter, options.csv_schema, callback,
+                parse_tabular(data_source, store, check, options.encoding, options.delimiter, options.csv_schema, callback,
                           skip_error_tables=options.skip_error_tables)
             store.flush()
             if options.schemas:

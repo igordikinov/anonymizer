@@ -12,14 +12,14 @@ from .runlog import RunLog
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="SNP Anonymizer — автономное обезличивание данных")
-    parser.add_argument("--input", type=Path, help="SQL-файл или папка CSV")
+    parser.add_argument("--input", type=Path, help="SQL/XLSX-файл, ZIP-архив или папка CSV/XLSX")
     parser.add_argument("--output", type=Path, help="Новая папка результата")
     parser.add_argument("--project", type=Path, help="Локальный файл соответствий .snpanon")
     parser.add_argument("--industry", choices=INDUSTRIES, default="food")
     parser.add_argument("--encoding", choices=["utf-8-sig", "cp1251"], default="utf-8-sig")
     parser.add_argument("--delimiter", choices=[",", ";", "tab", "|"], default=None)
     parser.add_argument("--schema", action="append", default=[], help="Обрабатывать только указанную схему SQL; можно повторить")
-    parser.add_argument("--csv-schema", default="public")
+    parser.add_argument("--csv-schema", default="public", help="Исходная схема для CSV/XLSX без manifest (по умолчанию public)")
     parser.add_argument("--pg-host", help="Загрузить результат в PostgreSQL: хост")
     parser.add_argument("--pg-port", type=int, default=5432)
     parser.add_argument("--pg-db", dest="pg_db", help="Целевая база данных")

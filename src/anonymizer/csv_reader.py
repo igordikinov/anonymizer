@@ -9,7 +9,7 @@ from .errors import AnonymizerError, Cancelled
 from .sql_reader import MAX_FIELD
 
 
-def parse_csv(path, store, check=lambda: None, encoding="utf-8-sig", delimiter=None, schema="public", progress=lambda n: None, skip_error_tables=False):
+def parse_csv(path, store, check=lambda: None, encoding="utf-8-sig", delimiter=None, schema="public", progress=lambda n: None, skip_error_tables=False, *, files=None):
     csv.field_size_limit(MAX_FIELD)
     manifest = None
     if (path / "manifest.json").exists():
@@ -17,9 +17,12 @@ def parse_csv(path, store, check=lambda: None, encoding="utf-8-sig", delimiter=N
         if manifest.get("format") != "snp-anonymizer-csv-v1":
             raise AnonymizerError("Неподдерживаемый manifest.json.")
     entries = manifest["tables"] if manifest else [{"file": p.name, "schema": schema,
-               "table": re.sub(r"_\d{12,}$", "", p.stem).lower()} for p in sorted(path.glob("*.csv"))]
+               "table": re.sub(r"_\d{12,}$", "", p.stem).lower()} for p in (files if files is not None else sorted(path.glob("*.csv")))]
     if not entries:
         raise AnonymizerError("В выбранной папке нет CSV.")
+    identities = [(entry["schema"], entry["table"]) for entry in entries]
+    if len(set(identities)) != len(identities):
+        raise AnonymizerError("Таблица повторяется в нескольких файлах CSV; оставьте один файл на таблицу.")
     done = 0
     for entry in entries:
         check()

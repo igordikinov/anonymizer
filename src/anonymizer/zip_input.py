@@ -12,15 +12,44 @@ rejected instead of partially processed.
 from __future__ import annotations
 
 import re
+import struct
 import zipfile
 from pathlib import PurePosixPath
 
 from .errors import AnonymizerError
 
 MAX_UNCOMPRESSED = 4 * 1024**3
-DATA_SUFFIXES = {".csv", ".sql", ".json"}
+DATA_SUFFIXES = {".csv", ".xlsx", ".sql", ".json"}
+MAX_ENTRIES = 4096
+MAX_DIRECTORY_BYTES = 8 * 1024 * 1024
 CHUNK = 1024 * 1024
 RESERVED = {"aux", "con", "prn", "nul", *(f"com{i}" for i in range(1, 10)), *(f"lpt{i}" for i in range(1, 10))}
+
+
+def _bounded_directory(path):
+    # ZipFile builds its complete central directory in memory. Bound it BEFORE
+    # opening, even for archives consisting entirely of ignored files.
+    with path.open("rb") as stream:
+        stream.seek(0, 2)
+        size = stream.tell()
+        stream.seek(max(0, size - 65557))
+        tail = stream.read(65557)
+    offset = tail.rfind(b"PK\x05\x06")
+    if offset < 0 or offset + 22 > len(tail):
+        raise AnonymizerError("Файл не является корректным ZIP-архивом.")
+    # ZipFile honors a ZIP64 locator even when the ordinary EOCD contains
+    # small, non-sentinel counts. Reject before its unbounded allocation.
+    absolute_end = size - len(tail) + offset
+    if absolute_end >= 20:
+        with path.open("rb") as stream:
+            stream.seek(absolute_end - 20)
+            if stream.read(4) == b"PK\x06\x07":
+                raise AnonymizerError("ZIP64-каталог не поддерживается; используйте обычный ZIP.")
+    _, disk, start_disk, on_disk, entries, directory_bytes, _, comment = struct.unpack_from("<4s4H2LH", tail, offset)
+    if offset + 22 + comment != len(tail) or disk or start_disk or on_disk != entries:
+        raise AnonymizerError("Многотомный или повреждённый ZIP-архив не поддерживается.")
+    if entries > MAX_ENTRIES or directory_bytes > MAX_DIRECTORY_BYTES:
+        raise AnonymizerError("Превышен лимит числа записей или размера каталога ZIP-архива.")
 
 
 def _safe_name(name):
@@ -46,16 +75,23 @@ def _safe_name(name):
 def extract_dataset(zip_path, dest_dir, check=lambda: None, progress=lambda done: None, max_uncompressed=None):
     """Extracts the dataset from the archive; returns a CSV folder or the .sql file."""
     limit = MAX_UNCOMPRESSED if max_uncompressed is None else max_uncompressed
+    _bounded_directory(zip_path)
     try:
         archive = zipfile.ZipFile(zip_path)
     except zipfile.BadZipFile as error:
         raise AnonymizerError(f"Файл не является корректным ZIP-архивом ({type(error).__name__}).") from None
     with archive:
-        entries, claimed = [], 0
+        if len(archive.infolist()) > MAX_ENTRIES:
+            raise AnonymizerError("Превышен лимит числа записей ZIP-архива.")
+        entries, claimed, seen = [], 0, set()
         for entry in archive.infolist():
             check()
             clean = _safe_name(entry.filename)
             if clean is not None:
+                identity = str(clean).casefold()
+                if identity in seen:
+                    raise AnonymizerError("В ZIP-архиве повторяется имя файла; обработка запрещена.")
+                seen.add(identity)
                 entries.append((entry, clean))
             claimed += entry.file_size
         if claimed > limit:
@@ -89,20 +125,20 @@ def extract_dataset(zip_path, dest_dir, check=lambda: None, progress=lambda done
                 raise AnonymizerError("Реальный размер содержимого архива не совпадает с заявленным; обработка запрещена.")
             extracted.append((clean, target))
         sqls = [target for clean, target in extracted if clean.suffix.lower() == ".sql"]
-        csvs = [clean for clean, _ in extracted if clean.suffix.lower() == ".csv"]
+        csvs = [clean for clean, _ in extracted if clean.suffix.lower() in {".csv", ".xlsx"}]
         if sqls and csvs:
-            raise AnonymizerError("В архиве одновременно SQL-дамп и CSV; оставьте что-то одно.")
+            raise AnonymizerError("В архиве одновременно SQL-дамп и CSV/XLSX; оставьте что-то одно.")
         if len(sqls) > 1:
             raise AnonymizerError("В архиве несколько SQL-файлов; нужен ровно один дамп.")
         if sqls:
             return sqls[0]
         if not csvs:
-            raise AnonymizerError("В архиве нет CSV или SQL-дампа; нечего обрабатывать.")
+            raise AnonymizerError("В архиве нет CSV/XLSX или SQL-дампа; нечего обрабатывать.")
         flat = [clean for clean in csvs if len(clean.parts) == 1]
         deep = [clean for clean in csvs if len(clean.parts) > 1]
         if flat and deep:
             # One of the two sets would be silently dropped by a folder choice.
-            raise AnonymizerError("CSV лежат и в корне архива, и в подпапках; оставьте один уровень.")
+            raise AnonymizerError("CSV/XLSX лежат и в корне архива, и в подпапках; оставьте один уровень.")
         if flat:
             return dest_dir
         tops = {clean.parts[0] for clean in deep}
@@ -110,6 +146,6 @@ def extract_dataset(zip_path, dest_dir, check=lambda: None, progress=lambda done
             folder = dest_dir / tops.pop()
             if (dest_dir / "manifest.json").is_file():
                 # The manifest governs the parse and must sit beside the CSVs.
-                raise AnonymizerError("manifest.json лежит в корне архива, а CSV — в подпапке; положите их вместе.")
+                raise AnonymizerError("manifest.json лежит в корне архива, а CSV/XLSX — в подпапке; положите их вместе.")
             return folder
-        raise AnonymizerError("CSV лежат глубже одного уровня папок; распакуйте набор плоско или в одну подпапку.")
+        raise AnonymizerError("CSV/XLSX лежат глубже одного уровня папок; распакуйте набор плоско или в одну подпапку.")

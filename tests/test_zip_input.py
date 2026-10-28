@@ -1,5 +1,6 @@
 """ZIP archive as input: content routing, zip-slip and bomb guards. Synthetic data only."""
 import zipfile
+import struct
 from pathlib import Path
 
 import pytest
@@ -30,6 +31,35 @@ def test_zip_with_flat_csv_runs_like_folder(tmp_path):
     folder = run(Options(plain, tmp_path / "out2", tmp_path / "synthetic.snpanon"))
     assert zipped["rows"] == folder["rows"] == 3
     assert (tmp_path / "out/dump.sql").read_bytes() == (tmp_path / "out2/dump.sql").read_bytes()
+
+
+def test_zip64_cannot_hide_large_directory_behind_small_eocd(tmp_path, monkeypatch):
+    source = make_zip(tmp_path, [("item.csv", CSV_A)])
+    data = source.read_bytes()
+    end = data.rfind(b"PK\x05\x06")
+    fields = struct.unpack_from("<4s4H2LH", data, end)
+    record = struct.pack("<4sQ2H2L4Q", b"PK\x06\x06", 44, 45, 45, 0, 0,
+                         fields[4], fields[4], fields[5], fields[6])
+    locator = struct.pack("<4sLQL", b"PK\x06\x07", 0, end, 1)
+    ordinary = struct.pack("<4s4H2LH", b"PK\x05\x06", 0, 0, 0, 0, 0, 0, 0)
+    source.write_bytes(data[:end] + record + locator + ordinary)
+    # The standard library uses the hidden ZIP64 record, not the zero counts.
+    with zipfile.ZipFile(source) as archive:
+        assert len(archive.infolist()) == 1
+    monkeypatch.setattr("anonymizer.zip_input.MAX_DIRECTORY_BYTES", 1)
+    with pytest.raises(AnonymizerError, match="ZIP64"):
+        extract_dataset(source, tmp_path / "extract")
+
+
+def test_zip_directory_count_is_checked_even_when_eocd_lies(tmp_path, monkeypatch):
+    source = make_zip(tmp_path, [("item.csv", CSV_A), ("loc.csv", CSV_B)])
+    data = bytearray(source.read_bytes())
+    end = data.rfind(b"PK\x05\x06")
+    struct.pack_into("<HH", data, end + 8, 1, 1)
+    source.write_bytes(data)
+    monkeypatch.setattr("anonymizer.zip_input.MAX_ENTRIES", 1)
+    with pytest.raises(AnonymizerError, match="числа записей"):
+        extract_dataset(source, tmp_path / "extract")
 
 
 def test_zip_with_single_subfolder_and_sql_variants(tmp_path):
