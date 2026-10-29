@@ -145,6 +145,9 @@ def check(exe):
         (bypass_source / "sku.csv").write_text(
             "note,order_id,qty,day,uom,abc,activeflag,sys_id\n"
             "SYN_GENERIC_PRIVATE,999,1234567890.123456789,2026-10-29,kg,A,Y,777\n", encoding="utf-8")
+        (bypass_source / "optimizer_production.csv").write_text(
+            "product,resource,location,bomnum,qty,day\n"
+            "SYN_SHARED,SYN_SHARED,SYN_SHARED,SYN_SHARED,1234567890.123456789,2026-10-29\n", encoding="utf-8")
         from datetime import date
         book = Workbook(iso_dates=True)
         book.active.append(["code", "qty", "day"])
@@ -156,7 +159,7 @@ def check(exe):
             subprocess.run([str(exe), "--input", str(bypass_source), "--output", str(output),
                             "--project", str(root / "bypass.snpanon"), "--bypass-model"], check=True, **kwargs)
             report = json.loads((output / "report.json").read_text(encoding="utf-8"))
-            assert report["tables"] == report["rows"] == 2
+            assert report["tables"] == report["rows"] == 3
             assert not report["model_applied"] and not report["relationships_checked"] and not report["keys_checked"]
             assert report["validation"]["preserved_fields_equal"]
             manifest = json.loads((output / "csv/manifest.json").read_text(encoding="utf-8"))
@@ -167,9 +170,13 @@ def check(exe):
                 assert "sys_id" not in row
                 if entry["table"] == "sku":
                     assert row["order_id"] == "999" and row["qty"] == "1234567890.123456789"
-                    assert row["note"] != "SYN_GENERIC_PRIVATE" and row["uom"] != "kg" and row["abc"] != "A" and row["activeflag"] != "Y"
+                    assert all(row[column] == f"{column}_000001" for column in ("note", "uom", "abc", "activeflag"))
+                elif entry["table"] == "custom":
+                    assert row["code"] == "code_000001" and row["qty"] == "42.125"
                 else:
-                    assert row["code"] != "123" and row["qty"] == "42.125"
+                    assert entry["table"] == "optimizer_production"
+                    assert all(row[column] == f"{column}_000001" for column in ("product", "resource", "location", "bomnum"))
+                    assert row["qty"] == "1234567890.123456789"
         assert (root / "bypass-out-1/dump.sql").read_bytes() == (root / "bypass-out-2/dump.sql").read_bytes()
         print("EXE smoke: bundled Manrope with 12px fields, brand DS, SQL/CSV/XLSX file/folder/ZIP, exact numbers, formula/skip and full model bypass passed; no Python on child PATH")
 

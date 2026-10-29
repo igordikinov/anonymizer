@@ -169,7 +169,7 @@ def test_generic_domains_do_not_reuse_standard_project_mappings(tmp_path):
             finally:
                 project.finish(True)
     assert results[0] == results[1]
-    assert results[0][0].startswith("Атрибут")
+    assert results[0][0] == "note_000001"
 
 
 def test_sql_ddl_bypass_has_no_model_enrichment_and_discards_alter_fks(tmp_path):
@@ -257,7 +257,7 @@ def test_inference_state_has_no_samples_and_bounded_columns():
         InputInference("custom", ["field"] * 16385)
 
 
-@pytest.mark.parametrize("sql_type,original", [("character(1)", "1"), ("text", "Атрибут 0001")])
+@pytest.mark.parametrize("sql_type,original", [("character(1)", "1"), ("text", "note_000001")])
 def test_generic_text_retries_equal_candidate_and_repeats_stably(tmp_path, sql_type, original):
     results = []
     for index in range(2):

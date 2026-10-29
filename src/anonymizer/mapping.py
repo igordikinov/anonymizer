@@ -55,7 +55,7 @@ class Project:
         self.db.execute("BEGIN")
 
     def pseudonym(self, domain, original, length=None, root=None, uuid_type=False, label=None, numeric=False,
-                  avoid_original=False):
+                  avoid_original=False, text_prefix=None):
         if numeric:
             original = canonical.numeric(original)
         elif uuid_type:
@@ -74,7 +74,7 @@ class Project:
                 self.counters[domain] += 1
                 ordinal = self.counters[domain]
                 if avoid_original and not numeric and not uuid_type:
-                    value, ordinal = self._fresh_text(domain, original, length, root, label, ordinal)
+                    value, ordinal = self._fresh_text(domain, original, length, root, label, ordinal, text_prefix)
                     self.counters[domain] = ordinal
                 elif numeric:
                     candidate = ordinal
@@ -111,13 +111,14 @@ class Project:
                 self.cache_bytes -= (len(removed_domain) + len(removed_old) + len(removed_value)) * 4
         return value
 
-    def _fresh_text(self, domain, original, length, root, label, ordinal):
+    def _fresh_text(self, domain, original, length, root, label, ordinal, text_prefix=None):
         # A short field has a finite code space. Bound both arithmetic and SQL
         # probes, and never insert/cache a candidate equal to its source value.
         space = 36 ** length if length and length <= 6 else None
         attempts = min(MAX_GENERIC_RETRIES, space) if space else MAX_GENERIC_RETRIES
         for _ in range(attempts):
-            value = self.label(label, ordinal) if label else PREFIX.get(root, "A") + f"{ordinal:06d}"
+            value = (f"{text_prefix}_{ordinal:06d}" if text_prefix is not None else
+                     self.label(label, ordinal) if label else PREFIX.get(root, "A") + f"{ordinal:06d}")
             if length and len(value) > length:
                 value = base36(ordinal % space if space else ordinal)
                 if len(value) > length:
@@ -213,7 +214,8 @@ class Transformer:
                     value = json_data.dump(self.json_transform(json_data.load(old), schema, table, col))
                 else:
                     value = self.project.pseudonym(domain, old, field.get("length"), uuid_type=rule == "uuid",
-                                                   label=None if rule == "uuid" else "text", avoid_original=rule == "text")
+                                                   label=None if rule == "uuid" else "text", avoid_original=rule == "text",
+                                                   text_prefix=col if rule == "text" else None)
                     if value == old:
                         raise AnonymizerError(f"Таблица {table}, колонка {col}: замена совпала с исходным текстом. Нужен другой проект.")
             elif rule == "json":
