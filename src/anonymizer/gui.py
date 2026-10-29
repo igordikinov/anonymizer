@@ -10,6 +10,7 @@ import tkinter.font as tkfont
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
+from uuid import uuid4
 
 from . import __version__
 from . import ds_tokens as ds
@@ -348,12 +349,20 @@ class Application:
                 messagebox.showerror("Проект", "Не удалось прочитать настройки проекта.")
 
     def new_project(self):
-        path = filedialog.asksaveasfilename(defaultextension=".snpanon", filetypes=[("Проект SNP Anonymizer", "*.snpanon")])
-        if path:
-            if Path(path).exists():
-                messagebox.showerror("Новый проект", "Выберите новое имя файла; существующий проект не перезаписывается.")
-            else:
-                self.project.set(path)
+        parent = filedialog.askdirectory(parent=self.root, title="Папка для нового проекта (отдельно от входа и результата)", mustexist=True)
+        if not parent:
+            return
+        # Only choose the path here: the pipeline creates the project after
+        # validating the input and output locations. Never reuse an old map.
+        try:
+            for _ in range(10):
+                path = Path(parent) / f"client_{uuid4().hex}.snpanon"
+                if not path.exists() and not path.is_symlink():
+                    self.project.set(str(path))
+                    return
+        except OSError:
+            pass
+        messagebox.showerror("Новый проект", "Не удалось выбрать имя нового проекта. Выберите другую папку.", parent=self.root)
 
     def pick_mapping(self):
         path = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Книга Excel", "*.xlsx")])
