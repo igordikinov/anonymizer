@@ -69,7 +69,7 @@ def test_standard_fk_descriptions_and_json_are_latin_but_preserved_values_stay(t
     assert all(value.isascii() for value in (item["item"], item["proddescr"], loc["loc"],
                                             loc["locdescr"], sku["planner"]))
     assert item["baseuom"] == "ШТ" and item["update_date_time"] == "Сырое время"
-    assert item["sys_id"] == r"\N" and item["change_author"] == "snp"
+    assert item["sys_id"] == "" and item["change_author"] == "snp"
     assert item["quantity"] == "1234567890.123456789" and item["day"] == "2026-10-29"
     assert item["active"] == "true" and report["validation"]["preserved_fields_equal"]
     changed_json = json.loads(item["payload"])
@@ -106,7 +106,7 @@ def test_generic_unicode_sources_keep_column_prefixes_and_system_policy(tmp_path
     row, = exported_rows(output)["optimizer_production"]
     assert [row[column] for column in columns[:4]] == [f"{column}_000001" for column in columns[:4]]
     assert row["quantity"] == "42.125" and row["day"] == "2026-10-29" and row["active"] == "true"
-    assert row["sys_id"] == r"\N" and row["update_date_time"] == "Сырое время"
+    assert row["sys_id"] == "" and row["update_date_time"] == "Сырое время"
     assert row["change_author"] == "snp" and not report["relationships_checked"]
 
 

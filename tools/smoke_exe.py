@@ -39,7 +39,7 @@ def check(exe):
         assert gui["states"]["Primary.TButton"]["disabled active pressed"] == "#f4f6fa"
         assert gui["states"]["Primary.TButton"]["pressed active"] == "#3350c4"
         source = root / "source.sql"
-        source.write_text("CREATE TABLE public.item(sys_id bigint, item text, proddescr text, volume numeric, update_date_time timestamp, change_author uuid); INSERT INTO public.item VALUES ('SYN_BAD_ID','PRIVATE_CODE','PRIVATE_DESCRIPTION',12345.678901,'SYN_RAW_TIME','SYN_BAD_AUTHOR');", encoding="utf-8")
+        source.write_text("CREATE TABLE public.item(sys_id bigint, item text, proddescr text, volume numeric, update_date_time timestamp, change_author uuid, cost numeric); INSERT INTO public.item VALUES ('SYN_BAD_ID','PRIVATE_CODE','PRIVATE_DESCRIPTION',12345.678901,'SYN_RAW_TIME','SYN_BAD_AUTHOR',NULL);", encoding="utf-8")
         subprocess.run([str(exe), "--input", str(source), "--output", str(root / "out"), "--project", str(root / "client.snpanon"), "--industry", "chem"], check=True, **kwargs)
         report = json.loads((root / "out/report.json").read_text(encoding="utf-8"))
         assert report["rows"] == 1 and report["validation"]["preserved_fields_equal"]
@@ -49,7 +49,8 @@ def check(exe):
         import csv
         with (root / "out/csv" / manifest["tables"][0]["file"]).open(encoding="utf-8", newline="") as stream:
             row, = list(csv.DictReader(stream))
-        assert row["sys_id"] == r"\N" and row["change_author"] == "snp" and row["update_date_time"] == "SYN_RAW_TIME"
+        assert row["sys_id"] == "" and row["change_author"] == "snp" and row["update_date_time"] == "SYN_RAW_TIME"
+        assert row["cost"] == "" and {"cost", "sys_id"}.issubset(manifest["tables"][0]["empty_null_columns"])
         assert row["proddescr"] == "Interior paint - series 0001" and row["item"].isascii()
         assert "SYN_BAD_ID" not in (root / "out/dump.sql").read_text(encoding="utf-8")
         assert "SYN_BAD_AUTHOR" not in (root / "out/dump.sql").read_text(encoding="utf-8")
@@ -97,7 +98,7 @@ def check(exe):
         entry, = csv_manifest["tables"]
         with (root / "csv-out/csv" / entry["file"]).open(encoding="utf-8", newline="") as stream:
             csv_rows = list(csv.DictReader(stream))
-        assert [(r["fixhor"], r["fixlotsize"]) for r in csv_rows] == [(r"\N", r"\N"), ("0", "1234567890.123456")]
+        assert [(r["fixhor"], r["fixlotsize"]) for r in csv_rows] == [("", ""), ("0", "1234567890.123456")]
         assert "prod_prof" not in csv_rows[0] and "prof_descr" not in csv_rows[0]
         for filename in ("dump.sql", "inserts.sql"):
             sql_text = (root / "csv-out" / filename).read_text(encoding="utf-8")
@@ -157,8 +158,8 @@ def check(exe):
             "note,order_id,qty,day,uom,abc,activeflag,sys_id,update_date_time,change_author\n"
             "SYN_GENERIC_PRIVATE,999,1234567890.123456789,2026-10-29,kg,A,Y,SYN_BAD_ID,SYN_RAW_TIME,SYN_BAD_AUTHOR\n", encoding="utf-8")
         (bypass_source / "optimizer_production.csv").write_text(
-            "product,resource,location,bomnum,qty,day\n"
-            "SYN_SHARED,SYN_SHARED,SYN_SHARED,SYN_SHARED,1234567890.123456789,2026-10-29\n", encoding="utf-8")
+            "product,resource,location,bomnum,qty,day,cost\n"
+            "SYN_SHARED,SYN_SHARED,SYN_SHARED,SYN_SHARED,1234567890.123456789,2026-10-29,\\N\n", encoding="utf-8")
         from datetime import date
         book = Workbook(iso_dates=True)
         book.active.append(["code", "qty", "day"])
@@ -179,7 +180,7 @@ def check(exe):
                     row, = list(csv.DictReader(stream))
                 assert row["day"] == "2026-10-29"
                 if "sys_id" in row:
-                    assert row["sys_id"] == r"\N"
+                    assert row["sys_id"] == ""
                 if entry["table"] == "sku":
                     assert row["change_author"] == "snp" and row["update_date_time"] == "SYN_RAW_TIME"
                     assert row["order_id"] == "999" and row["qty"] == "1234567890.123456789"
@@ -190,8 +191,17 @@ def check(exe):
                     assert entry["table"] == "optimizer_production"
                     assert all(row[column] == f"{column}_000001" for column in ("product", "resource", "location", "bomnum"))
                     assert row["qty"] == "1234567890.123456789"
+                    assert row["cost"] == "" and "cost" in entry["empty_null_columns"]
         assert (root / "bypass-out-1/dump.sql").read_bytes() == (root / "bypass-out-2/dump.sql").read_bytes()
-        print("EXE smoke: bundled Manrope with 12px fields, brand DS, SQL/CSV/XLSX file/folder/ZIP, exact numbers, formula/skip and full model bypass passed; no Python on child PATH")
+        subprocess.run([str(exe), "--input", str(root / "bypass-out-1/csv"), "--output", str(root / "csv-roundtrip"),
+                        "--project", str(root / "roundtrip.snpanon"), "--bypass-model"], check=True, **kwargs)
+        roundtrip = json.loads((root / "csv-roundtrip/csv/manifest.json").read_text(encoding="utf-8"))
+        optimizer, = [entry for entry in roundtrip["tables"] if entry["table"] == "optimizer_production"]
+        with (root / "csv-roundtrip/csv" / optimizer["file"]).open(encoding="utf-8", newline="") as stream:
+            row, = list(csv.DictReader(stream))
+        assert row["cost"] == "" and row["qty"] == "1234567890.123456789"
+        assert "cost" in optimizer["empty_null_columns"]
+        print("EXE smoke: bundled Manrope, brand DS, SQL/CSV/XLSX file/folder/ZIP, exact numbers, numeric NULL blanks and manifest roundtrip, formula/skip and full model bypass passed; no Python on child PATH")
 
 
 if __name__ == "__main__":

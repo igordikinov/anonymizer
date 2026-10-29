@@ -50,7 +50,7 @@ def parse_csv(path, store, check=lambda: None, encoding="utf-8-sig", delimiter=N
             manifest = json.loads(raw_manifest.decode("utf-8"))
         else:
             manifest = json.loads((path / "manifest.json").read_text(encoding="utf-8"))
-        if manifest.get("format") != "snp-anonymizer-csv-v1":
+        if manifest.get("format") not in ("snp-anonymizer-csv-v1", "snp-anonymizer-csv-v2"):
             raise AnonymizerError("Неподдерживаемый manifest.json.")
     entries = manifest["tables"] if manifest else [{"file": p.name, "schema": schema,
                "table": re.sub(r"_\d{12,}$", "", p.stem).lower()} for p in (files if files is not None else sorted(path.glob("*.csv")))]
@@ -110,7 +110,20 @@ def _read_csv_file(store, check, entry, file, encoding, delimiter, manifest, pat
             # CSV has no physical DDL: build the complete selected model table.
             store.define(name, store.model.fields(name[1]), from_model=True)
         full_header = list(header)
+        marked_empty_null = (entry.get("empty_null_columns", [])
+                             if manifest and manifest["format"] == "snp-anonymizer-csv-v2" else [])
+        known_columns = set(full_header)
+        table = store.tables.get(name)
+        if table is not None:
+            known_columns.intersection_update(f["name"] for f in table["fields"])
+        if (not isinstance(marked_empty_null, list) or len(marked_empty_null) > len(full_header)
+                or any(not isinstance(col, str) or col not in known_columns for col in marked_empty_null)
+                or len(set(marked_empty_null)) != len(marked_empty_null)):
+            raise AnonymizerError(f"CSV {entry['table']}: некорректный список empty_null_columns в manifest.json.")
         header = store.ensure(name, header)
+        table = store.tables.get(name)
+        if manifest and table is not None:
+            table["csv_empty_null_columns"] = frozenset(marked_empty_null).intersection(header) - {"update_date_time"}
         kept_indexes = [i for i, col in enumerate(full_header) if col in set(header)]
         # External CSV commonly uses empty cells for absent numeric values.
         # Resolve only nullable numeric columns once, from the effective model.
@@ -118,14 +131,16 @@ def _read_csv_file(store, check, entry, file, encoding, delimiter, manifest, pat
         nullable_numbers = {f["name"] for f in store.tables.get(name, {}).get("fields", ())
                             if f["name"] not in SYSTEM and f["type"] in {"NUMBER", "INTEGER"}
                             and f.get("nullable", True)} if manifest is None else set()
-        empty_as_null = {i for i, col in enumerate(full_header) if col in nullable_numbers}
+        null_columns = nullable_numbers | set(marked_empty_null)
+        empty_as_null = {i for i, col in enumerate(full_header) if col in null_columns}
         for row in reader:
             if bounded is not None:
                 bounded.reset()
             check()
             if len(row) != len(full_header):
                 raise AnonymizerError(f"CSV {entry['table']}, запись {reader.line_num}: неправильное число полей.")
-            # Keep TEXT blanks, nonempty values, and manifest escaping unchanged.
+            # Only explicit manifest columns or external nullable numbers
+            # decode blanks as NULL; other TEXT and escaping remain unchanged.
             # csv.reader returns both quoted and unquoted empty cells as "".
             values = [None if value == r"\N" or (value == "" and i in empty_as_null)
                       else (value[1:] if manifest and value.startswith("\\\\") else value)

@@ -33,13 +33,13 @@ def parse_tabular(path, store, check=lambda: None, encoding="utf-8-sig", delimit
             raise AnonymizerError("Слишком много файлов или слишком длинные имена в наборе CSV/XLSX.")
         files.append(file)
     files.sort(key=lambda file: file.name)
-    if not files:
-        raise AnonymizerError("В выбранной папке нет CSV или XLSX.")
     has_manifest = (path / "manifest.json").exists()
     if has_manifest:
         if any(file.suffix.lower() == ".xlsx" for file in files):
             raise AnonymizerError("Набор с XLSX и manifest.json не поддерживается: manifest описывает только CSV.")
         return parse_csv(path, store, check, encoding, delimiter, schema, progress, skip_error_tables)
+    if not files:
+        raise AnonymizerError("В выбранной папке нет CSV или XLSX.")
     seen = set()
     for file in files:
         name = table_name(file)

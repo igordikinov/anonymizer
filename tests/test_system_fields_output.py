@@ -55,7 +55,7 @@ def test_system_output_policy_matches_all_exports_and_never_maps_audit_values(tm
     entry, = manifest["tables"]
     with (output / "csv" / entry["file"]).open(encoding="utf-8", newline="") as stream:
         rows = list(csv.DictReader(stream))
-    assert [row["sys_id"] for row in rows] == [r"\N"] * 3
+    assert [row["sys_id"] for row in rows] == [""] * 3
     assert [row["update_date_time"] for row in rows] == ["SYN_BAD_TIMESTAMP", "", r"\N"]
     assert [row["change_author"] for row in rows] == ["snp"] * 3
     assert [row["quantity"] for row in rows] == ["1234567890.123456789", "42", "0.000001"]

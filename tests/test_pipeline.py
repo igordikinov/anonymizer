@@ -109,7 +109,7 @@ def test_csv_model_and_quotes(tmp_path):
     manifest = json.loads((tmp_path / "out/csv/manifest.json").read_text())
     csv_file = tmp_path / "out/csv" / manifest["tables"][0]["file"]
     rows = list(csv.reader(csv_file.open(encoding="utf-8", newline="")))
-    assert rows[1][rows[0].index("sys_id")] == r"\N"
+    assert rows[1][rows[0].index("sys_id")] == ""
     assert rows[1][rows[0].index("volume")] == "0.123456"
     assert rows[2][rows[0].index("proddescr")] == r"\N"
 

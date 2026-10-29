@@ -68,10 +68,13 @@ def test_nonempty_numeric_input_is_not_rewritten(tmp_path, value):
 
 
 @pytest.mark.parametrize("with_fields", [False, True])
-def test_manifest_does_not_apply_external_csv_blank_policy(tmp_path, with_fields):
+@pytest.mark.parametrize("extra_marker", [False, True])
+def test_manifest_does_not_apply_external_csv_blank_policy(tmp_path, with_fields, extra_marker):
     source = tmp_path / "source"
     source.mkdir()
     entry = {"schema": "public", "table": "sku", "file": "sku.csv"}
+    if extra_marker:
+        entry["empty_null_columns"] = ["fixhor"]  # v1 semantics remain unchanged
     if with_fields:
         entry["fields"] = [
             {"name": "item", "sql_type": "text", "nullable": False},

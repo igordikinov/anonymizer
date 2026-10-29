@@ -36,7 +36,7 @@ def test_full_bypass_keeps_extra_columns_without_business_keys(tmp_path, table):
     assert not report["skipped_tables"] and report["validation"]["preserved_fields_equal"]
     row, = output_rows(output)[table]
     assert set(row) == {"note", "order_id", "qty", "day", "uom", "abc", "activeflag", "sys_id"}
-    assert row["sys_id"] == r"\N"
+    assert row["sys_id"] == ""
     assert (row["order_id"], row["qty"], row["day"]) == ("999", "12345678901234567890.123456789", "2026-10-29")
     for key, original in (("note", "SYN_SECRET"), ("uom", "kg"), ("abc", "A"), ("activeflag", "Y")):
         assert row[key] != original
@@ -92,7 +92,7 @@ def test_input_sql_types_preserved_but_model_and_alter_links_ignored(tmp_path):
     report = run(Options(source, output, tmp_path / "private.snpanon", bypass_model=True))
     row, = output_rows(output)["sku"]
     assert row["order_id"] == "123" and row["qty"] == "123.0000001" and row["day"] == "2026-10-29"
-    assert row["note"] != "kg" and row["sys_id"] == r"\N"
+    assert row["note"] != "kg" and row["sys_id"] == ""
     assert not report["relationships_checked"] and not report["keys_checked"]
 
 

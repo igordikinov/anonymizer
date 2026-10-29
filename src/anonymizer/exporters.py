@@ -19,9 +19,9 @@ def sql_value(value):
     return "E'" + value.replace("\\", "\\\\").replace("'", "''").replace("\n", r"\n").replace("\r", r"\r").replace("\t", r"\t") + "'"
 
 
-def csv_value(value):
+def csv_value(value, empty_null=False):
     if value is None:
-        return r"\N"
+        return "" if empty_null else r"\N"
     # Escape leading backslash so a literal \N differs from SQL NULL.
     return "\\" + value if value.startswith("\\") else value
 
@@ -32,7 +32,7 @@ class Exporter:
         (directory / "csv").mkdir()
         self.dump = (directory / "dump.sql").open("w", encoding="utf-8", newline="\n")
         self.inserts = (directory / "inserts.sql").open("w", encoding="utf-8", newline="\n")
-        self.manifest = {"format": "snp-anonymizer-csv-v1", "encoding": "utf-8", "delimiter": ",", "null": r"\N", "leading_backslash": "doubled", "tables": []}
+        self.manifest = {"format": "snp-anonymizer-csv-v2", "encoding": "utf-8", "delimiter": ",", "null": r"\N", "leading_backslash": "doubled", "tables": []}
         self.dump.write("-- SNP Anonymizer: standalone table/data dump\nSET standard_conforming_strings = on;\nBEGIN;\n")
         self.inserts.write("-- SNP Anonymizer: data only; target tables must exist\nSET standard_conforming_strings = on;\nBEGIN;\n")
         for schema in schema_names.values():
@@ -50,6 +50,14 @@ class Exporter:
         schema, table_name = self.schema_names[name[0]], name[1]
         self.full = f"{quote(schema)}.{quote(table_name)}"
         fields = table["fields"]
+        # Numeric CSV cells must contain a number or be empty. Inferred
+        # null-only columns have no knowable type but can use the same codec.
+        # Raw audit timestamps may contain an intentional empty string even
+        # with numeric DDL, so retain their lossless legacy representation.
+        inherited_empty_null = table.get("csv_empty_null_columns", ())
+        self.csv_empty_null = [f["name"] != "update_date_time" and (
+            f["type"] in {"NUMBER", "INTEGER"}
+            or (f["name"] not in SYSTEM and f["name"] in inherited_empty_null)) for f in fields]
         self.columns = ", ".join(quote(f["name"]) for f in fields)
         # Data-only INSERT targets existing platform tables: omitting sys_id
         # lets their identity/default assign it rather than inserting NULL.
@@ -64,6 +72,9 @@ class Exporter:
         self.csv_writer.writerow([f["name"] for f in fields])
         entry = {"schema": schema, "table": table_name, "file": f"{schema}/{table_name}.csv", "rows": table["rows"],
                  "fields": [{k: f[k] for k in ("name", "sql_type", "nullable")} for f in fields]}
+        empty_null_columns = [f["name"] for f, empty_null in zip(fields, self.csv_empty_null) if empty_null]
+        if empty_null_columns:
+            entry["empty_null_columns"] = empty_null_columns
         # Targets outside the published set keep their original schema name; the
         # group is unverifiable on re-import and must not leak that name.
         groups = []
@@ -87,7 +98,7 @@ class Exporter:
 
     def row(self, row):
         self.dump.write("\t".join(copy_value(v) for v in row) + "\n")
-        self.csv_writer.writerow([csv_value(v) for v in row])
+        self.csv_writer.writerow([csv_value(v, empty_null) for v, empty_null in zip(row, self.csv_empty_null, strict=True)])
         text = "(" + ",".join(sql_value(row[index]) for index in self.insert_indexes) + ")"
         self.chunk.append(text)
         self.chunk_size += len(text)

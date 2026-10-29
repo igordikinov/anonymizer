@@ -87,7 +87,7 @@ def test_mixed_dataset_fk_three_exports_and_nulls(tmp_path, container):
     rows = exported_tables(output)
     assert rows["item"][0]["item"] == rows["sku"][0]["item"]
     assert rows["loc"][0]["loc"] == rows["sku"][0]["loc"]
-    assert rows["sku"][0]["fixhor"] == r"\N" and rows["sku"][0]["fixlotsize"] == "0"
+    assert rows["sku"][0]["fixhor"] == "" and rows["sku"][0]["fixlotsize"] == "0"
     recovered = []
     for idx, (reader, source) in enumerate(((parse_sql, output / "dump.sql"),
                                           (parse_sql, output / "inserts.sql"),

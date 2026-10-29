@@ -146,6 +146,12 @@ class Store:
         fields = state.fields()
         self._reserve_input_metadata(name, fields)
         table["fields"] = [self._input_field(field) for field in fields]
+        # These columns contain only NULL, not even an explicit empty TEXT.
+        # Keep their type unknown (TEXT), but allow readable empty CSV cells
+        # with an explicit per-column NULL declaration in the manifest.
+        table["csv_empty_null_columns"] = frozenset(column for column, kind, empty in
+            zip(state.columns, state.types, state.empty)
+            if column not in SYSTEM and kind is None and not empty)
         typed_blanks = {index for index, (kind, empty) in enumerate(zip(state.types, state.empty))
                         if kind is not None and kind != "TEXT" and empty}
         if typed_blanks:
