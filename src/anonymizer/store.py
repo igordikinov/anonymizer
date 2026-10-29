@@ -5,10 +5,14 @@ import re
 import sqlite3
 
 from .errors import AnonymizerError
+from .generic_input import InputInference, InputLimitError
+from .metadata import physical_type, sql_type
+
+MAX_INPUT_METADATA = 16 * 1024**2
 
 
 class Store:
-    def __init__(self, path, model):
+    def __init__(self, path, model, bypass_model=False):
         self.db = sqlite3.connect(path)
         self.db.execute("PRAGMA journal_mode=OFF")
         self.db.execute("PRAGMA cache_size=-16384")
@@ -17,6 +21,9 @@ class Store:
           CREATE INDEX row_table ON rows(tid,id);
         """)
         self.model, self.tables, self.skipped = model, {}, {}
+        self.bypass_model = bypass_model
+        self._input_inference = {}
+        self._input_metadata_used, self._input_metadata_costs = 0, {}
         self.dropped_columns: list[tuple[str, str]] = []
         self.dropped_tables: list[tuple[str, str]] = []  # (schema.table, причина)
         self._dropped_names: set = set()
@@ -33,12 +40,12 @@ class Store:
             raise AnonymizerError("Пустой или повторяющийся список колонок в структуре.")
         if name in self.tables:
             raise AnonymizerError(f"Повторное CREATE TABLE: {name[1]}.")
-        groups = self._normalize_groups(name, fields, fk_groups)
-        keys = self._normalize_keys(name, fields, key_groups)
+        groups = self._normalize_groups(name, fields, fk_groups) if not self.bypass_model else []
+        keys = self._normalize_keys(name, fields, key_groups) if not self.bypass_model else []
         # Logical model grain: only flags that come from the YAML snapshot, before
         # they merge with DDL PK/UK flags in enrich. sys_id is system identity:
         # it is omitted from exports and never part of a validated key.
-        model_grain = [f["name"] for f in fields if f["name"] != "sys_id"
+        model_grain = [] if self.bypass_model else [f["name"] for f in fields if f["name"] != "sys_id"
                        and set((self.model.field(name[1], f["name"]) or {}).get("keys") or []) & {"BK", "PK", "UK"}]
         if model_grain:
             descriptor = {"columns": model_grain, "kind": "model_bk", "nulls": "distinct"}
@@ -47,8 +54,125 @@ class Store:
         # Dropping a table must not reuse the ID of another live table.
         tid = self._next_table_id
         self._next_table_id += 1
-        self.tables[name] = {"id": tid, "fields": [self.model.enrich(name[1], f) for f in fields], "rows": 0,
-                             "fk_groups": groups, "key_groups": keys, "from_model": from_model}
+        if self.bypass_model:
+            self._reserve_input_metadata(name, fields)
+        try:
+            effective_fields = [self._input_field(f) if self.bypass_model else self.model.enrich(name[1], f) for f in fields]
+        except BaseException:
+            self._release_input_metadata(name)
+            raise
+        self.tables[name] = {"id": tid, "fields": effective_fields, "rows": 0,
+                             "fk_groups": groups, "key_groups": keys, "from_model": from_model and not self.bypass_model,
+                             "structure_source": "input" if self.bypass_model else "model" if from_model else "ddl"}
+
+    def _reserve_input_metadata(self, name, fields):
+        # Include dictionary/list/string overhead conservatively. This protects
+        # the complete retained catalog, not just one table or one worksheet.
+        cost = 512 + sum(len(part) * 4 for part in name)
+        for field in fields:
+            if any(field.get(key) is not None and not isinstance(field.get(key), (str, int, bool))
+                   for key in ("name", "type", "sql_type", "size")):
+                raise AnonymizerError("Некорректные метаданные поля входной таблицы.")
+            cost += 1024 + sum(len(str(field.get(key, ""))) * 4
+                               for key in ("name", "type", "sql_type", "size"))
+        previous = self._input_metadata_costs.get(name, 0)
+        if self._input_metadata_used - previous + cost > MAX_INPUT_METADATA:
+            raise InputLimitError("Превышен общий лимит структуры таблиц без эталона.")
+        self._input_metadata_used += cost - previous
+        self._input_metadata_costs[name] = cost
+
+    def _release_input_metadata(self, name):
+        self._input_metadata_used -= self._input_metadata_costs.pop(name, 0)
+
+    def _reserve_input_drop(self, name, reason):
+        # A dropped table still retains a name in both a dict and a set, plus a
+        # display name/reason in the report list. Replacing the live-table
+        # reservation with this tombstone prevents skip streams from evading
+        # the catalog limit by repeatedly defining and dropping new tables.
+        cost = 1024 + sum(len(part) * 12 for part in name) + len(reason) * 4
+        previous = self._input_metadata_costs.get(name, 0)
+        if self._input_metadata_used - previous + cost > MAX_INPUT_METADATA:
+            raise InputLimitError("Превышен общий лимит структуры таблиц без эталона.")
+        self._input_metadata_used += cost - previous
+        self._input_metadata_costs[name] = cost
+
+    @staticmethod
+    def _input_field(field):
+        # A manifest may contain arbitrary nested attributes. Retain only the
+        # scalar input schema actually used here, so the catalog byte budget
+        # cannot be bypassed by descriptions or another unaccounted payload.
+        result = {key: field[key] for key in ("name", "type", "sql_type", "size", "nullable") if key in field}
+        result.setdefault("nullable", True)
+        if type(result["nullable"]) is not bool:
+            raise AnonymizerError("Некорректная обязательность поля входной таблицы.")
+        result.update(keys=[], fk=None)
+        if "sql_type" in field:
+            if not isinstance(field["sql_type"], str):
+                raise AnonymizerError("Некорректный тип поля входной таблицы.")
+            safe, kind, length = physical_type(field["sql_type"])
+            result.update(sql_type=safe, type=kind, length=length)
+        else:
+            if result.get("type") not in {"TEXT", "NUMBER", "INTEGER", "BOOLEAN", "DATE", "DATE_TIME", "TIME", "UUID", "JSONB"}:
+                raise AnonymizerError("Неподдерживаемый тип поля входной таблицы.")
+            if result.get("size") is not None:
+                if isinstance(result["size"], bool) or not isinstance(result["size"], (str, int)):
+                    raise AnonymizerError("Некорректный размер поля входной таблицы.")
+                result["size"] = str(result["size"])
+            safe, _, length = physical_type(sql_type(result))
+            result.update(sql_type=safe, length=length)
+        return result
+
+    def define_input(self, name, columns):
+        """Define only the submitted header; never add fields from the snapshot."""
+        if not self.bypass_model:
+            raise AnonymizerError("Режим обхода эталона не включён.")
+        state = InputInference(name[1], columns)
+        self.define(name, state.fields())
+        if name in self.tables:
+            self._input_inference[name] = state
+
+    def observe_input(self, name, row_values, native_types=None):
+        state = self._input_inference.get(name)
+        if state is not None:
+            state.observe(row_values, native_types)
+
+    def finish_input(self, name, check=lambda: None):
+        """Finish inference and normalize numeric blanks through the disk spool."""
+        state = self._input_inference.pop(name, None)
+        if state is None or name not in self.tables:
+            return
+        check()
+        table = self.tables[name]
+        fields = state.fields()
+        self._reserve_input_metadata(name, fields)
+        table["fields"] = [self._input_field(field) for field in fields]
+        typed_blanks = {index for index, (kind, empty) in enumerate(zip(state.types, state.empty))
+                        if kind is not None and kind != "TEXT" and empty}
+        if typed_blanks:
+            self.flush()
+            # No fetchall/update batch proportional to the input: each row is
+            # bounded by the reader's field/row limit and released immediately.
+            cursor = self.db.execute("SELECT id,body FROM rows WHERE tid=? ORDER BY id", (table["id"],))
+            for row_id, encoded in cursor:
+                check()
+                values = json.loads(encoded)
+                changed = False
+                for index in typed_blanks:
+                    if values[index] == "":
+                        values[index], changed = None, True
+                if changed:
+                    self.db.execute("UPDATE rows SET body=? WHERE id=?", (json.dumps(values, ensure_ascii=False), row_id))
+            self.db.commit()
+
+    def finish_import(self):
+        """SQL ALTER may append constraints after define; bypass never uses them."""
+        if self.bypass_model:
+            if self._input_inference:
+                raise AnonymizerError("Не завершено определение типов таблицы без эталона.")
+            for table in self.tables.values():
+                table["fk_groups"], table["key_groups"] = [], []
+                for field in table["fields"]:
+                    field["keys"], field["fk"] = [], None
 
     @staticmethod
     def _normalize_keys(name, fields, key_groups):
@@ -105,6 +229,8 @@ class Store:
 
     def columns(self, name):
         if name not in self.tables:
+            if self.bypass_model:
+                raise AnonymizerError(f"Таблица {name[1]}: без эталона требуется DDL или заголовок CSV/XLSX.")
             raise AnonymizerError(f"Таблица {name[1]}: нет DDL и списка колонок.")
         return [f["name"] for f in self.tables[name]["fields"]]
 
@@ -121,6 +247,8 @@ class Store:
         if name in self._dropped_names:
             return []  # отброшенная таблица: колонок к обработке нет
         if name not in self.tables:
+            if self.bypass_model:
+                raise AnonymizerError(f"Таблица {name[1]}: без эталона требуется DDL или заголовок CSV/XLSX.")
             if name[1] in self.model.tables:
                 # Data-only вход (как CSV): структура — полная таблица модели;
                 # входные колонки отфильтруются ниже, BK-проверка — по эталону.
@@ -139,6 +267,8 @@ class Store:
                     raise AnonymizerError(f"Таблица {name[1]}: ни одна колонка данных не совпала с моделью; данные не относятся к этой таблице.")
                 self.define(name, fields)
         available = self.columns(name)
+        if self.bypass_model and set(columns) - set(available):
+            raise AnonymizerError(f"Таблица {name[1]}: колонки входа отсутствуют в его структуре.")
         kept = [col for col in columns if col in available]
         for col in columns:
             if col not in available:
@@ -187,7 +317,14 @@ class Store:
         игнорируются, чтобы поздний CREATE/INSERT не воскресил отброшенное.
         """
         self.flush()  # незакоммиченный батч мог уже содержать строки таблицы
+        if self.bypass_model and name not in self._dropped_names:
+            # Reserve before removing fields or retaining another diagnostic;
+            # failure leaves the prior catalog accounting intact.
+            self._reserve_input_drop(name, reason)
         data = self.tables.pop(name, None)
+        self._input_inference.pop(name, None)
+        if not self.bypass_model:
+            self._release_input_metadata(name)
         if data is not None:
             self.db.execute("DELETE FROM rows WHERE tid=?", (data["id"],))
             self.count -= data["rows"]
@@ -205,6 +342,8 @@ class Store:
         self.db.close()
 
     def root(self, schema, table, column):
+        if self.bypass_model:
+            return schema, table, column
         seen = set()
         while (schema, table, column) not in seen:
             seen.add((schema, table, column))
@@ -221,7 +360,8 @@ class Store:
         raise AnonymizerError("Цикл ссылок между полями. Нужен исправленный профиль модели.")
 
     def field(self, schema, table, column):
-        return next((f for f in self.tables.get((schema, table), {}).get("fields", []) if f["name"] == column), None) or self.model.field(table, column)
+        field = next((f for f in self.tables.get((schema, table), {}).get("fields", []) if f["name"] == column), None)
+        return field if self.bypass_model else field or self.model.field(table, column)
 
     def __enter__(self):
         return self

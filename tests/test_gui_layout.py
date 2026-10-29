@@ -50,9 +50,9 @@ def test_dark_rail_with_in_icon(tk_root):
     app = Application(tk_root)
     tk_root.update()
     rail = app.rail
-    assert rail.winfo_ismapped() and rail.winfo_width() == 69
-    assert rail.cget("background") == "#1b1b1b"
-    assert app.rail_logo.winfo_ismapped()  # только In., белый на чёрном
+    assert rail.winfo_ismapped() and rail.winfo_width() == app.px(69)
+    assert rail.cget("background") == "#04143a"
+    assert app.rail_logo.winfo_ismapped()  # только In., белый на тёмно-синем
 
 
 def test_help_button_lives_in_dark_topbar(tk_root):
@@ -60,8 +60,10 @@ def test_help_button_lives_in_dark_topbar(tk_root):
     app = Application(tk_root)
     tk_root.update()
     assert app.help_button.winfo_ismapped()
-    assert app.help_button.cget("background") == "#1b1b1b"
-    assert app.help_button.cget("foreground") == "#ffffff"  # белая на чёрной полосе — сразу видно
+    assert app.help_button.cget("background") == "#04143a"
+    assert app.help_button.cget("foreground") == "#ffffff"  # белая на тёмно-синей полосе — сразу видно
+    assert app.help_button.cget("highlightcolor") == "#ffffff"
+    assert int(app.help_button.cget("highlightthickness")) == app.px(2)
     assert "Справка" in app.help_button.cget("text") and "F1" in app.help_button.cget("text")
 
 
@@ -70,8 +72,8 @@ def test_buttons_follow_scp_button_canon(tk_root):
     # stroked: белый фон + обводка #949598 (видимый контур на любом фоне)
     assert style.lookup("TButton", "background") == "#ffffff"
     assert style.lookup("TButton", "bordercolor") == "#949598"
-    # primary: заливка #9000ff
-    assert style.lookup("Primary.TButton", "background") == "#9000ff"
+    # primary: заливка #4769ff
+    assert style.lookup("Primary.TButton", "background") == "#4769ff"
 
 
 def test_journal_export_button(tmp_path, tk_root, monkeypatch):

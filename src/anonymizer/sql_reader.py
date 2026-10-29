@@ -6,8 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .errors import AnonymizerError, Cancelled
+from .generic_input import InputLimitError, MAX_COLUMNS
 
 MAX_FIELD = 8 * 1024 * 1024
+SKIPPED_CREATE_KINDS = frozenset("SCHEMA SEQUENCE INDEX VIEW FUNCTION TRIGGER TYPE EXTENSION ROLE TABLESPACE DATABASE MATERIALIZED OR UNIQUE DOMAIN AGGREGATE PROCEDURE POLICY STATISTICS RULE CAST COLLATION CONVERSION FOREIGN TRANSFORM USER PUBLICATION SUBSCRIPTION TEXT ACCESS OPERATOR TEMP TEMPORARY".split())
 
 
 @dataclass
@@ -207,8 +209,13 @@ def comma_groups(lexer):
     """Tokens inside (...) grouped by top-level commas."""
     expect(lexer, "(")
     group, depth = [], 0
+    input_bytes, count = 0, 0
     while True:
         t = lexer.pop()
+        if getattr(lexer, "bypass_model", False):
+            input_bytes += len(t.value) * 4 + 128
+            if input_bytes > MAX_FIELD:
+                raise InputLimitError("Превышен лимит структуры или записи SQL без эталона.")
         if t.kind == "eof":
             lexer.fail("Незавершённый список")
         if t.value == "(" and t.kind == "punct":
@@ -220,6 +227,9 @@ def comma_groups(lexer):
                 return
             depth -= 1
         if t.value == "," and t.kind == "punct" and not depth:
+            count += 1
+            if getattr(lexer, "bypass_model", False) and count >= MAX_COLUMNS:
+                raise InputLimitError("Превышен лимит колонок SQL без эталона.")
             yield group
             group = []
         else:
@@ -258,6 +268,7 @@ def parse_sql(path: Path, store, check=lambda: None, encoding="utf-8-sig", progr
     with path.open(encoding=encoding, newline="") as stream:
         reader = Reader(stream, check, encoding)
         lex = Lexer(reader)
+        lex.bypass_model = getattr(store, "bypass_model", False)
         while lex.peek().kind != "eof":
             check()
             t = lex.pop()
@@ -294,7 +305,7 @@ def parse_sql(path: Path, store, check=lambda: None, encoding="utf-8-sig", progr
                             fk_groups.extend(fks)
                             key_groups.extend(keys)
                         store.define(name, fields, fk_groups, key_groups)
-                    except Cancelled:
+                    except (Cancelled, InputLimitError):
                         raise
                     except AnonymizerError as error:
                         if not skip_error_tables:
@@ -302,11 +313,17 @@ def parse_sql(path: Path, store, check=lambda: None, encoding="utf-8-sig", progr
                         if name is not None:
                             store.drop_table(name, str(error))
                         else:
-                            store.dropped_tables.append((f"{schema}.<неразобранная таблица>", str(error)))
+                            if lex.bypass_model:
+                                store.drop_table((schema, "<неразобранная таблица>"), str(error))
+                            else:
+                                store.dropped_tables.append((f"{schema}.<неразобранная таблица>", str(error)))
                         skip_statement(lex)
                         continue
                 else:
-                    store.skipped["create_" + kind.value] = store.skipped.get("create_" + kind.value, 0) + 1
+                    if lex.bypass_model and kind.value.upper() not in SKIPPED_CREATE_KINDS:
+                        lex.fail("Неподдерживаемая SQL-конструкция CREATE")
+                    skipped_kind = "create_" + (kind.value.lower() if lex.bypass_model else kind.value)
+                    store.skipped[skipped_kind] = store.skipped.get(skipped_kind, 0) + 1
                 skip_statement(lex)
             elif t.is_("COPY"):
                 name = qualified(lex, schema)
@@ -329,7 +346,7 @@ def parse_sql(path: Path, store, check=lambda: None, encoding="utf-8-sig", progr
                             lex.fail("Число полей COPY не совпадает со списком колонок")
                         values = [None if raw[i] == r"\N" else decode_escape(raw[i], reader.encoding) for i in kept_indexes]
                         store.add_row(name, columns, values)
-                except Cancelled:
+                except (Cancelled, InputLimitError):
                     raise
                 except AnonymizerError as error:
                     if not skip_error_tables:
@@ -359,7 +376,7 @@ def parse_sql(path: Path, store, check=lambda: None, encoding="utf-8-sig", progr
                         else:
                             expect(lex, ";")
                             break
-                except Cancelled:
+                except (Cancelled, InputLimitError):
                     raise
                 except AnonymizerError as error:
                     if not skip_error_tables:
@@ -390,6 +407,7 @@ def parse_sql(path: Path, store, check=lambda: None, encoding="utf-8-sig", progr
 
 def skip_statement(lexer, collect=False):
     tokens = []
+    input_bytes = 0
     while True:
         t = lexer.pop()
         if t.kind == "eof":
@@ -397,6 +415,10 @@ def skip_statement(lexer, collect=False):
         if t.kind == "punct" and t.value == ";":
             return tokens
         if collect:
+            if getattr(lexer, "bypass_model", False):
+                input_bytes += len(t.value) * 4 + 128
+                if input_bytes > MAX_FIELD:
+                    raise InputLimitError("Превышен лимит структуры SQL без эталона.")
             tokens.append(t)
 
 
@@ -541,6 +563,8 @@ def alter_constraint(store, tokens, default_schema, lexer):
     if pos < len(tokens) and tokens[pos].is_("ADD"):
         table_entry = store.tables[(schema, table)]
         fks, keys = apply_table_constraint(table_entry["fields"], tokens[pos+1:], schema, lexer)
+        if getattr(store, "bypass_model", False):
+            return
         for group in fks:
             if group not in table_entry["fk_groups"]:
                 table_entry["fk_groups"].append(group)

@@ -1,0 +1,195 @@
+// Фирменный стиль In.Plan (руководство, октябрь 2026) поверх темы scp-ui.
+// Прототип: переопределяет CSS-переменные темы. Окончательно цвета и шрифт
+// меняются в дизайн-токенах (theme-source) и npm run styles:generate.
+
+// Manrope (OFL), локально: стенд работает без доступа в интернет
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/assets/fonts/manrope/manrope-cyrillic-400-normal.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/assets/fonts/manrope/manrope-latin-400-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/assets/fonts/manrope/manrope-cyrillic-500-normal.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/assets/fonts/manrope/manrope-latin-500-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/assets/fonts/manrope/manrope-cyrillic-600-normal.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/assets/fonts/manrope/manrope-latin-600-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/assets/fonts/manrope/manrope-cyrillic-700-normal.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/assets/fonts/manrope/manrope-latin-700-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('/assets/fonts/manrope/manrope-cyrillic-800-normal.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('/assets/fonts/manrope/manrope-latin-800-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+// :root:root — тема scp-ui подключается в сборке ещё раз позже этого файла
+// (`:root, ::before, ::after`), обычный :root ею перебивается
+:root:root {
+  // Палитра руководства: акцент #4769ff, тёмный #04143a, фон #f4f6fa, акцент-2 #ff8c00
+  --mat-button-text-label-text-color: #04143a;
+  --mat-icon-button-state-layer-color: #04143a;
+  --mat-progress-bar-active-indicator-color: #4769ff;
+  --mat-progress-bar-track-color: #c8d3ff;
+  --mat-sys-background: #f4f6fa;
+  --mat-sys-on-background: #04143a;
+  --mat-sys-on-primary-container: #6f8aff;
+  --mat-sys-on-secondary-container: #4769ff;
+  --mat-sys-on-surface: #04143a;
+  --mat-sys-on-surface-variant: #04143a;
+  --mat-sys-primary: #4769ff;
+  --mat-sys-scrim: #04143a;
+  --mat-sys-secondary-container: #f4f6fa;
+  --mat-sys-shadow: #04143a;
+  --mat-sys-surface-bright: #f4f6fa;
+  --mat-sys-surface-container-high: #f4f6fa;
+  --mat-sys-surface-container-lowest: #f4f6fa;
+  --mat-sys-surface-variant: #04143a;
+  --mat-sys-tertiary: #04143a;
+  --mat-tooltip-container-color: #04143a;
+  --scp-accent-primary: #4769ff;
+  --scp-accent-sub-primary: #6f8aff;
+  --scp-active-btn-color: #4769ff;
+  --scp-background-action-neutral-secondary-default: #f4f6fa;
+  --scp-background-modal: #f4f6fa;
+  --scp-background-secondary: #f4f6fa;
+  --scp-badge-bg: #f4f6fa;
+  --scp-badge-color: #04143a;
+  --scp-color-color: #4769ff;
+  --scp-common-second-background: #f4f6fa;
+  --scp-content-secondary: #f4f6fa;
+  --scp-content-secondary-bg: #f4f6fa;
+  --scp-drawer-resize-handle-bg: #04143a;
+  --scp-gird-accent-color: #4769ff;
+  --scp-gird-total-color: #4769ff;
+  --scp-grid-cell-disabled-bg: #f4f6fa;
+  --scp-grid-resizer-color: #4769ff;
+  --scp-grid-selected-cell-border-color: #4769ff;
+  --scp-input-disabled-bgcolor: #f4f6fa;
+  --scp-input-disabled-color: #04143a;
+  --scp-link-text-color: #4769ff;
+  --scp-loader-active-indicator-color: #4769ff;
+  --scp-loader-track-color: #c8d3ff;
+  --scp-main-font-color: #04143a;
+  --scp-note-icon-color-info: #4769ff;
+  --scp-note-icon-color-warning: #ff8c00;
+  --scp-option-selected-bg: #f4f6fa;
+  --scp-option-selected-label-text-color: #4769ff;
+  --scp-primary-color: #4769ff;
+  --scp-pseudo-checkbox-selected-icon-color: #4769ff;
+  --scp-radio-inactive-border: #04143a;
+  --scp-system-warning-primary: #ff8c00;
+  --scp-table-cell-disabled-bg: #f4f6fa;
+  --scp-text-brand-primary-color: #4769ff;
+  --scp-tooltip-bgcolor: #04143a;
+
+  // Шрифт: Manrope, Open Sans остаётся запасным
+  --scp-body-bold: 700 14px/20px 'Manrope', 'Open Sans', sans-serif;
+  --scp-body-regular: 400 14px/20px 'Manrope', 'Open Sans', sans-serif;
+  --scp-body-semibod: 600 14px/20px 'Manrope', 'Open Sans', sans-serif;
+  --scp-font-display-font-family: 'Manrope', 'Open Sans', sans-serif;
+  --scp-font-families-open-sans: 'Manrope', 'Open Sans', sans-serif;
+  --scp-font-family: 'Manrope', 'Open Sans', sans-serif;
+  --scp-form-field-font: 400 12px/16px 'Manrope', 'Open Sans', sans-serif;
+  --scp-form-field-hint-font: 400 12px/16px 'Manrope', 'Open Sans', sans-serif;
+  --scp-h1-bold: 700 52px/64px 'Manrope', 'Open Sans', sans-serif;
+  --scp-h1-regular: 400 52px/64px 'Manrope', 'Open Sans', sans-serif;
+  --scp-h1-semibod: 600 52px/64px 'Manrope', 'Open Sans', sans-serif;
+  --scp-h2-bold: 700 48px/60px 'Manrope', 'Open Sans', sans-serif;
+  --scp-h2-regular: 400 48px/60px 'Manrope', 'Open Sans', sans-serif;
+  --scp-h2-semibod: 600 48px/60px 'Manrope', 'Open Sans', sans-serif;
+  --scp-h3-bold: 700 40px/48px 'Manrope', 'Open Sans', sans-serif;
+  --scp-h3-regular: 400 40px/48px 'Manrope', 'Open Sans', sans-serif;
+  --scp-h3-semibod: 600 40px/48px 'Manrope', 'Open Sans', sans-serif;
+  --scp-h4-bold: 700 32px/40px 'Manrope', 'Open Sans', sans-serif;
+  --scp-h4-regular: 400 32px/40px 'Manrope', 'Open Sans', sans-serif;
+  --scp-h4-semibod: 600 32px/40px 'Manrope', 'Open Sans', sans-serif;
+  --scp-h5-bold: 700 24px/30px 'Manrope', 'Open Sans', sans-serif;
+  --scp-h5-regular: 400 24px/30px 'Manrope', 'Open Sans', sans-serif;
+  --scp-h5-semibod: 600 24px/30px 'Manrope', 'Open Sans', sans-serif;
+  --scp-h6-font-bold: 700 20px/28px 'Manrope', 'Open Sans', sans-serif;
+  --scp-h6-font-regular: 400 20px/28px 'Manrope', 'Open Sans', sans-serif;
+  --scp-h6-font-semibod: 600 20px/28px 'Manrope', 'Open Sans', sans-serif;
+  --scp-h7-bold: 700 18px/24px 'Manrope', 'Open Sans', sans-serif;
+  --scp-h7-regular: 400 18px/24px 'Manrope', 'Open Sans', sans-serif;
+  --scp-h7-semibod: 600 18px/24px 'Manrope', 'Open Sans', sans-serif;
+  --scp-sm-bold: 700 16px/24px 'Manrope', 'Open Sans', sans-serif;
+  --scp-sm-regular: 400 16px/24px 'Manrope', 'Open Sans', sans-serif;
+  --scp-sm-semibod: 600 16px/24px 'Manrope', 'Open Sans', sans-serif;
+  --scp-xs-bold: 700 12px/16px 'Manrope', 'Open Sans', sans-serif;
+  --scp-xs-regular: 400 12px/16px 'Manrope', 'Open Sans', sans-serif;
+  --scp-xs-semibod: 600 12px/16px 'Manrope', 'Open Sans', sans-serif;
+}
+
+// Акцент грида (полоса выделенной строки, уголок): библиотека @scp/grid-dom объявляет
+// свои значения по умолчанию на собственном элементе; повтор селектора — чтобы перебить их
+scp-grid-dom.scp-grid-dom.scp-grid-dom {
+  --scp-grid-accent-color: #4769ff;
+  --scp-gird-accent-color: #4769ff;
+}

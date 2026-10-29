@@ -14,12 +14,21 @@ from tkinter import filedialog, messagebox, ttk
 from . import __version__
 from . import ds_tokens as ds
 from . import theme
-from .fonts import prepare_gui
+from .fonts import prepare_gui, selected_font_evidence
 from .errors import AnonymizerError, Cancelled, PgCommitUncertain
 from .help_text import show_help
 from .mapping import INDUSTRIES
 from .pipeline import Options, PgOptions, run
 from .runlog import RunLog
+
+
+def _invoke_focused_ttk_button(event):
+    """Complete WinTk's button keyboard bindings without a default action on entries."""
+    widget = event.widget
+    if isinstance(widget, ttk.Button) and widget.focus_get() is widget:
+        if not widget.instate(["disabled"]):
+            widget.invoke()
+        return "break"
 
 
 class Application:
@@ -29,6 +38,11 @@ class Application:
         root.title("SNP Anonymizer")
         root.configure(bg=ds.BG_CANVAS)
         self.theme = theme.install(root)
+        # WinTk binds Space but leaves Return unbound for ttk buttons. Install
+        # only missing class bindings; native bindings on other Tk platforms
+        # remain intact, and Return in an Entry cannot start processing.
+        if not root.bind_class("TButton", "<Return>"):
+            root.bind_class("TButton", "<Return>", _invoke_focused_ttk_button)
         self.px = self.theme["px"]
         # Sizes are logical DS pixels; reserve room for native window chrome
         # and the taskbar when the scaled default exceeds the desktop.
@@ -47,8 +61,8 @@ class Application:
             root.iconphoto(True, icon)
         except tk.TclError:
             self._logo = None
-        # Чёрная полоса сверху: надпись перенесена сюда, шрифт вдвое мельче титула.
-        # Справка — заметная белая кнопка справа на чёрном; доступна и во время обработки.
+        # Тёмно-синяя полоса сверху: надпись перенесена сюда, шрифт вдвое мельче титула.
+        # Справка — заметная белая кнопка справа на тёмно-синем; доступна и во время обработки.
         bar = tk.Frame(root, height=self.px(44), bg=ds.RAIL)
         bar.pack(side="top", fill="x")
         bar.pack_propagate(False)
@@ -57,6 +71,8 @@ class Application:
         self.caption.pack(side="left", padx=self.px(ds.SPACE_XL))
         self.help_button = tk.Button(bar, text="?  Справка   F1", bg=ds.RAIL, fg=ds.TEXT_ON_BRAND,
                                      activebackground=ds.HOVER_ON_DARK, activeforeground=ds.TEXT_ON_BRAND,
+                                     highlightbackground=ds.RAIL, highlightcolor=ds.TEXT_ON_BRAND,
+                                     highlightthickness=self.px(2), takefocus=True,
                                      relief="flat", bd=0, font=self.font_secondary, cursor="hand2",
                                      command=lambda: show_help(root, __version__))
         self.help_button.pack(side="right", padx=self.px(ds.SPACE_L))
@@ -75,7 +91,7 @@ class Application:
         outer = ttk.Frame(root, padding=self.px(ds.SPACE_XL))
         outer.pack(side="left", fill="both", expand=True)
         root.bind("<F1>", lambda event: show_help(root, __version__))
-        self.wrap_label(outer, text="Клиентские данные → обезличенный набор для демо и анализа", style="Sub.TLabel").pack(fill="x", pady=(0, self.px(ds.SPACE_L)))
+        self.wrap_label(outer, text="Обезличенный набор клиентских данных для демо и анализа", style="Sub.TLabel").pack(fill="x", pady=(0, self.px(ds.SPACE_L)))
         self.source = tk.StringVar()
         self.output = tk.StringVar()
         self.project = tk.StringVar()
@@ -89,6 +105,7 @@ class Application:
         self.pg_password, self.pg_schema = tk.StringVar(), tk.StringVar(value="public")
         self.mapping_xlsx = tk.StringVar()
         self.skip_error_tables = tk.BooleanVar(value=False)
+        self.bypass_model = tk.BooleanVar(value=False)
         self.runlog = RunLog()
         self.status = tk.StringVar(value="Выберите SQL/XLSX, ZIP или папку CSV/XLSX")
         self.result = tk.StringVar(value="Будут созданы dump.sql, inserts.sql, csv/ и report.json")
@@ -132,7 +149,7 @@ class Application:
         self.path_row(card, 3, "Локальный проект", self.project, self.pick_project, "Открыть…", secondary=("Новый…", self.new_project))
         self.wrap_label(card, text="Проект содержит исходные значения и карту замен. Храните его отдельно от выдаваемого пакета.", style="Hint.TLabel").grid(row=4, column=0, columnspan=4, sticky="ew", pady=(self.px(ds.SPACE_S), 0))
         ttk.Label(card, text="Карта замен в Excel (необязательно)", style="Card.TLabel").grid(row=5, column=0, sticky="w", pady=self.px(ds.SPACE_XS))
-        entry = ttk.Entry(card, font=self.font_body, textvariable=self.mapping_xlsx)
+        entry = ttk.Entry(card, font=self.font_field, textvariable=self.mapping_xlsx)
         entry.grid(row=5, column=1, sticky="ew", padx=self.px(ds.SPACE_L), pady=self.px(ds.SPACE_XS))
         control = ttk.Button(card, text="Файл…", command=self.pick_mapping)
         control.grid(row=5, column=2, columnspan=2, sticky="ew", padx=(self.px(ds.SPACE_S), 0), pady=self.px(ds.SPACE_XS))
@@ -150,15 +167,19 @@ class Application:
             ("Разделитель CSV", self.delimiter, ["Авто", ";", ",", "Табуляция", "|"]),
         ], start=1):
             ttk.Label(card, text=caption, style="Card.TLabel").grid(row=row, column=0, sticky="w", pady=self.px(ds.SPACE_XS))
-            box = ttk.Combobox(card, font=self.font_body, textvariable=variable, values=values, state="readonly", width=35)
+            box = ttk.Combobox(card, font=self.font_field, textvariable=variable, values=values, state="readonly", width=35)
             box.grid(row=row, column=1, sticky="ew", padx=(self.px(ds.SPACE_L), 0), pady=self.px(ds.SPACE_XS))
             self.controls.append(box)
         ttk.Label(card, text="Схемы SQL", style="Card.TLabel").grid(row=4, column=0, sticky="w", pady=self.px(ds.SPACE_XS))
-        entry = ttk.Entry(card, font=self.font_body, textvariable=self.schemas)
+        entry = ttk.Entry(card, font=self.font_field, textvariable=self.schemas)
         entry.grid(row=4, column=1, sticky="ew", padx=(self.px(ds.SPACE_L), 0), pady=self.px(ds.SPACE_XS))
         self.controls.append(entry)
         self.wrap_label(card, text="Пусто — все схемы. Несколько схем — через запятую.", style="Hint.TLabel").grid(row=5, column=1, sticky="ew", padx=(self.px(ds.SPACE_L), 0))
         self.wrap_label(card, text="Количества, цены и даты сохраняются, включая JSON. Тексты и бизнес-коды заменяются.\nsys_id не выгружается.", style="Hint.TLabel").grid(row=6, column=0, columnspan=2, sticky="ew", pady=(self.px(ds.SPACE_L), 0))
+        bypass_check = self.wrap_check(card, text="Обрабатывать без эталонной модели", variable=self.bypass_model)
+        bypass_check.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(self.px(ds.SPACE_S), 0))
+        self.controls.append(bypass_check.control)
+        self.wrap_label(card, text="Без эталона: все тексты заменяются, числа (включая числовые коды) и даты сохраняются. Связи и ключи не проверяются.", style="Hint.TLabel").grid(row=8, column=0, columnspan=2, sticky="ew", pady=(self.px(ds.SPACE_S), 0))
 
         card = self.card(cards_holder, "3. Загрузка в PostgreSQL (необязательно)")
         check = self.wrap_check(card, text="После проверок загрузить датасет в базу (TRUNCATE таблиц датасета + COPY)", variable=self.pg_enabled, command=self.pg_toggle)
@@ -173,7 +194,7 @@ class Application:
         self.pg_entries = []
         for row, (caption, variable, grid_row, grid_col) in enumerate(pg_rows):
             ttk.Label(self.pg_frame, text=caption, style="Card.TLabel").grid(row=grid_row, column=grid_col, sticky="w", pady=self.px(ds.SPACE_XS), padx=(0, self.px(ds.SPACE_L) if grid_col == 0 else 0))
-            entry = ttk.Entry(self.pg_frame, font=self.font_body, textvariable=variable, show="*" if caption == "Пароль" else "")
+            entry = ttk.Entry(self.pg_frame, font=self.font_field, textvariable=variable, show="*" if caption == "Пароль" else "")
             entry.grid(row=grid_row, column=grid_col + 1, sticky="ew", pady=self.px(ds.SPACE_XS), padx=(0, self.px(ds.SPACE_L)))
             self.pg_entries.append(entry)
             self.controls.append(entry)
@@ -241,9 +262,20 @@ class Application:
         style = self.theme["style"]
         controls = [control for control in self.controls if isinstance(control, (ttk.Entry, ttk.Combobox))]
         actual = {name: tkfont.Font(root=self.root, font=font).actual() for name, font in self.theme["fonts"].items()}
-        widget_fonts = {"combo" if isinstance(control, ttk.Combobox) else "entry": tkfont.Font(root=self.root, font=control.cget("font")).actual()
-                        for control in controls}
-        return {"fonts": {"resolved": self.theme["faces"], "actual": actual, "widgets": widget_fonts}, "scale": self.theme["scale"],
+        widget_fonts = {f"{'combo' if isinstance(control, ttk.Combobox) else 'entry'}:{index}":
+                        tkfont.Font(root=self.root, font=control.cget("font")).actual()
+                        for index, control in enumerate(controls)}
+        popdown_fonts = {}
+        for index, control in enumerate(controls):
+            if isinstance(control, ttk.Combobox):
+                popup = self.root.tk.call("ttk::combobox::PopdownWindow", str(control))
+                font = self.root.tk.call(popup + ".f.l", "cget", "-font")
+                popdown_fonts[str(index)] = tkfont.Font(root=self.root, font=font).actual()
+        return {"fonts": {"resolved": self.theme["faces"], "actual": actual, "widgets": widget_fonts,
+                          "popdowns": popdown_fonts,
+                          "selected_faces": selected_font_evidence() if self.theme["faces"]["bundled"] else {},
+                          "configured_pixels": {name: abs(font[1]) for name, font in self.theme["fonts"].items()}},
+                "scale": self.theme["scale"],
                 "heights": {"entry": next(control.winfo_reqheight() for control in controls if isinstance(control, ttk.Entry)),
                             "combo": next(control.winfo_reqheight() for control in controls if isinstance(control, ttk.Combobox)),
                             "button": self.start_button.winfo_reqheight()},
@@ -271,7 +303,7 @@ class Application:
 
     def path_row(self, parent, row, caption, variable, callback, button, secondary=None):
         ttk.Label(parent, text=caption, style="Card.TLabel").grid(row=row, column=0, sticky="w", pady=self.px(ds.SPACE_XS))
-        entry = ttk.Entry(parent, font=self.font_body, textvariable=variable)
+        entry = ttk.Entry(parent, font=self.font_field, textvariable=variable)
         entry.grid(row=row, column=1, sticky="ew", padx=self.px(ds.SPACE_L), pady=self.px(ds.SPACE_XS))
         control = ttk.Button(parent, text=button, command=callback)
         control.grid(row=row, column=2, sticky="ew", pady=self.px(ds.SPACE_XS))
@@ -375,7 +407,7 @@ class Application:
                           {"Авто": None, "Табуляция": "\t"}.get(self.delimiter.get(), self.delimiter.get()),
                           tuple(s.strip() for s in self.schemas.get().split(",") if s.strip()), "public", pg,
                           Path(self.mapping_xlsx.get()) if self.mapping_xlsx.get().strip() else None, True,
-                          self.runlog, self.skip_error_tables.get())
+                          self.runlog, self.skip_error_tables.get(), self.bypass_model.get())
         self.running = True
         self.cancel.clear()
         self.start_button.configure(state="disabled")
@@ -472,7 +504,9 @@ def launch(smoke=False, smoke_report=None):
         if smoke_report is not None:
             Path(smoke_report).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         root.destroy()
-        if getattr(sys, "frozen", False) and not report["fonts"]["resolved"]["bundled"]:
-            raise RuntimeError("Bundled Open Sans failed to load")
+        faces = report["fonts"]["selected_faces"]
+        if getattr(sys, "frozen", False) and (not report["fonts"]["resolved"]["bundled"]
+                or len(faces) != 3 or not all(face["matches_bundled"] for face in faces.values())):
+            raise RuntimeError("Bundled Manrope failed to load")
     else:
         root.mainloop()

@@ -27,16 +27,33 @@ def test_native_fonts_heights_and_popdown(tk_root):
     for widget in app.controls:
         if isinstance(widget, (ttk.Entry, ttk.Combobox)):
             font = tkfont.Font(root=tk_root, font=widget.cget("font"))
-            assert font.actual("family") == "Open Sans"
+            assert font.actual("family") == "InPlan Desktop Manrope"
+            assert tk_root.tk.splitlist(widget.cget("font"))[-1] == str(-app.px(12))
             assert widget.winfo_reqheight() == app.px(40)
             assert widget.winfo_height() == app.px(40) or not widget.winfo_ismapped()
         if isinstance(widget, ttk.Combobox):
             popup = tk_root.tk.call("ttk::combobox::PopdownWindow", str(widget))
             font = tk_root.tk.call(popup + ".f.l", "cget", "-font")
-            assert tkfont.Font(root=tk_root, font=font).actual("family") == "Open Sans"
+            assert tkfont.Font(root=tk_root, font=font).actual("family") == "InPlan Desktop Manrope"
+            assert tk_root.tk.splitlist(font)[-1] == str(-app.px(12))
+            assert tk_root.tk.call(popup + ".f.l", "cget", "-background") == ds.BG_SURFACE
+            assert tk_root.tk.call(popup + ".f.l", "cget", "-foreground") == ds.TEXT_PRIMARY
+            assert tk_root.tk.call(popup + ".f.l", "cget", "-selectbackground") == ds.BRAND
+            assert tk_root.tk.call(popup + ".f.l", "cget", "-selectforeground") == ds.TEXT_ON_BRAND
     assert app.start_button.winfo_height() == app.px(40)
+    assert app.font_body[1] == -app.px(14)
+    assert app.font_field[1] == -app.px(12)
+    assert app.font_button[1] == -app.px(14)
     assert app.font_heading[1] == -app.px(16)
     assert app.font_secondary[1] == -app.px(12)
+    report = app.diagnostics()["fonts"]
+    assert report["configured_pixels"]["field"] == app.px(12)
+    assert report["configured_pixels"]["body"] == app.px(14)
+    fields = [control for control in app.controls if isinstance(control, (ttk.Entry, ttk.Combobox))]
+    assert len(report["widgets"]) == len(fields)
+    assert len(report["popdowns"]) == sum(isinstance(control, ttk.Combobox) for control in fields)
+    assert all(font == report["actual"]["field"] for font in report["widgets"].values())
+    assert all(font == report["actual"]["field"] for font in report["popdowns"].values())
 
 
 def test_combined_button_states_and_focus_images(tk_root):
@@ -44,7 +61,7 @@ def test_combined_button_states_and_focus_images(tk_root):
     style = app.theme["style"]
     for name in ("Primary.TButton", "Secondary.TButton"):
         assert style.lookup(name, "foreground", ("disabled", "pressed", "active", "focus")) == ds.BUTTON_TEXT_DISABLED
-        assert style.lookup(name, "background", ("pressed", "active")) == (ds.BRAND_ACTIVE if name.startswith("Primary") else ds.BG_CANVAS)
+        assert style.lookup(name, "background", ("pressed", "active")) == (ds.BRAND_ACTIVE if name.startswith("Primary") else ds.BG_PRESSED)
         # Inspect the raster actually supplied to the native image element:
         # focus remains visible while hovered/pressed; disabled is first.
         states = app.theme["image_states"]["DS." + name]
@@ -60,10 +77,98 @@ def test_combined_button_states_and_focus_images(tk_root):
                 assert image.get(mid, app.px(3)) == rgb  # inner fill
                 assert image.get(mid, image.height() // 2) == rgb
             else:
-                assert image.get(mid, 0) == (144, 0, 255)
+                assert image.get(mid, 0) == (71, 105, 255)
         disabled = states[0][1]
         if name.startswith("Primary"):
-            assert disabled.get(disabled.width() // 2, app.px(1)) == (245, 246, 248)
+            assert disabled.get(disabled.width() // 2, app.px(1)) == (244, 246, 250)
+
+
+def test_hint_and_subtitle_remain_readable_on_light_surfaces(tk_root):
+    app = fresh_app(tk_root)
+    style = app.theme["style"]
+    def luminance(color):
+        values = [value / 65535 for value in tk_root.winfo_rgb(color)]
+        linear = [value / 12.92 if value <= .04045 else ((value + .055) / 1.055) ** 2.4 for value in values]
+        return sum(value * weight for value, weight in zip(linear, (.2126, .7152, .0722)))
+    for name in ("TLabel", "Sub.TLabel", "Hint.TLabel"):
+        foreground = luminance(style.lookup(name, "foreground"))
+        background = luminance(style.lookup(name, "background"))
+        assert (max(foreground, background) + .05) / (min(foreground, background) + .05) >= 7
+
+
+def test_native_checkbutton_uses_brand_and_retains_toggle_behavior(tk_root):
+    app = fresh_app(tk_root)
+    style = app.theme["style"]
+    assert "indicatorforeground" in style.element_options("Checkbutton.indicator")
+    assert style.lookup("TCheckbutton", "indicatorforeground", ("selected",)) == ds.BRAND
+    assert style.lookup("TCheckbutton", "indicatorforeground", ("pressed", "active", "selected")) == ds.BRAND_ACTIVE
+    assert style.lookup("TCheckbutton", "indicatorforeground", ("disabled", "pressed", "active", "selected")) == ds.BUTTON_TEXT_DISABLED
+    assert style.lookup("TCheckbutton", "upperbordercolor", ("focus",)) == ds.BORDER_BRAND
+    assert style.lookup("TCheckbutton", "indicatorbackground", ("disabled", "alternate")) == ds.BG_DISABLED
+    check = next(control for control in app.controls if isinstance(control, ttk.Checkbutton))
+    before = check.instate(["selected"])
+    check.invoke()
+    assert check.instate(["selected"]) != before
+    check.invoke()
+    assert check.instate(["selected"]) == before
+
+
+def test_button_keyboard_tab_space_and_enter_are_scoped_to_focus(tk_root):
+    app = fresh_app(tk_root)
+    calls = []
+    app.start_button.configure(command=lambda: calls.append("start"))
+    entry = next(control for control in app.controls if isinstance(control, ttk.Entry))
+    entry.focus_force()
+    tk_root.update()
+    expected_next = tk_root.tk.call("tk_focusNext", str(entry))
+    entry.event_generate("<Tab>")
+    tk_root.update()
+    assert str(tk_root.focus_get()) == str(expected_next)
+
+    # Return in an editable field must not trigger the application's command.
+    entry.focus_force()
+    tk_root.update()
+    entry.event_generate("<Return>")
+    tk_root.update()
+    assert calls == []
+
+    app.start_button.focus_force()
+    tk_root.update()
+    for sequence in ("<space>", "<Return>"):
+        before = len(calls)
+        app.start_button.event_generate(sequence)
+        tk_root.update()
+        assert len(calls) == before + 1
+
+    app.start_button.state(["disabled"])
+    for sequence in ("<space>", "<Return>"):
+        before = len(calls)
+        app.start_button.event_generate(sequence)
+        tk_root.update()
+        assert len(calls) == before
+
+    check = next(control for control in app.controls if isinstance(control, ttk.Checkbutton))
+    check.focus_force()
+    tk_root.update()
+    before = check.instate(["selected"])
+    check.event_generate("<space>")
+    tk_root.update()
+    assert check.instate(["selected"]) != before
+
+
+def test_help_surface_and_close_keyboard_use_the_same_brand(tk_root):
+    from anonymizer.help_text import show_help
+
+    fresh_app(tk_root)
+    window = show_help(tk_root, "synthetic")
+    tk_root.update()
+    assert window.cget("background") == ds.BG_CANVAS
+    close = next(child for child in window.winfo_children() if isinstance(child, ttk.Button))
+    close.focus_force()
+    tk_root.update()
+    close.event_generate("<Return>")
+    tk_root.update()
+    assert not window.winfo_exists()
 
 
 def test_entry_and_combo_native_hover_and_focus(tk_root):

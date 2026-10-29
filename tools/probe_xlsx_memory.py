@@ -37,7 +37,7 @@ def fixture(path, count):
             stream.write(b"</sheetData></worksheet>")
 
 
-def child(source, spool):
+def child(source, spool, bypass_model=False):
     # Keep all reader imports inside the measured process.
     from anonymizer.metadata import Model
     from anonymizer.store import Store
@@ -51,10 +51,11 @@ def child(source, spool):
         return value
     xlsx_reader._Strings.get = measured_get
     start = time.monotonic()
-    with Store(spool, Model()) as store:
+    with Store(spool, Model(), bypass_model=bypass_model) as store:
         xlsx_reader.parse_xlsx(source, store)
         store.flush()
         result = {"rows": store.count, "peak_string_cache_bytes": peak_cache,
+                  "bypass_model": bypass_model,
                   "string_cache_limit_bytes": xlsx_reader.MAX_CACHE,
                   "spool_synchronous": store.db.execute("PRAGMA synchronous").fetchone()[0],
                   "seconds": round(time.monotonic() - start, 3)}
@@ -67,9 +68,10 @@ def main():
     parser.add_argument("--output", type=Path, default=Path("build/xlsx-memory"))
     parser.add_argument("--child", type=Path)
     parser.add_argument("--spool", type=Path)
+    parser.add_argument("--bypass-model", action="store_true")
     args = parser.parse_args()
     if args.child:
-        child(args.child, args.spool)
+        child(args.child, args.spool, args.bypass_model)
         return
     import psutil
     if any(n < 1 or n > 1048575 for n in args.rows):
@@ -85,7 +87,8 @@ def main():
             spool.unlink()
         fixture(source, count)
         env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
-        process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--child", str(source), "--spool", str(spool)],
+        process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--child", str(source), "--spool", str(spool),
+                                    *(["--bypass-model"] if args.bypass_model else [])],
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
         monitored = psutil.Process(process.pid)
         peak = 0

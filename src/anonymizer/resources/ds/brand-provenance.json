@@ -1,0 +1,48 @@
+{
+  "source_archive": "resources/brand/frontend-brand.tgz",
+  "archive_sha256": "904780db9b8a39671939560e013793e043eb76de4be68e640803f282c8af0ce5",
+  "tools": {
+    "pillow": "13.0.0"
+  },
+  "files": [
+    {
+      "name": "brand.scss",
+      "bytes": 9139,
+      "sha256": "da6b13165dfcc88d6b1f93b697965649a4ccdad738d1b9c774f87f87087826af",
+      "archive_member": "frontend-brand/files/projects/scp-shell/src/app/styles/brand.scss"
+    },
+    {
+      "name": "brand-palette.ts",
+      "bytes": 5085,
+      "sha256": "13961f9ff33b28a116780e6a3e2a61f84b0c46588f2c469454de5cf09b0520ce",
+      "archive_member": "frontend-brand/files/projects/scp-shared/src/lib/common/utils/brand-palette.ts"
+    },
+    {
+      "name": "header-logo-in.png",
+      "bytes": 305,
+      "sha256": "1d600d025fb24c1ee12b4e663caf31ef5339e0396f48c9b377e80e94f0cfe117",
+      "archive_member": "frontend-brand/files/projects/scp-shell/src/assets/images/header-logo-in.png"
+    },
+    {
+      "name": "app-icon.ico",
+      "bytes": 7406,
+      "sha256": "eb542a58f0e81a988ee558c5ac834395967ac852e1ebeb3654233a11a0f34a25",
+      "archive_member": "frontend-brand/files/projects/scp-shell/src/favicon.ico"
+    },
+    {
+      "name": "app-icon.png",
+      "bytes": 15059,
+      "sha256": "e279b67a16528abcf436be17d199e2443f2fd6b65fed82af3801b868786bfb30",
+      "archive_member": "frontend-brand/files/projects/scp-shell/src/favicon.ico",
+      "conversion": "largest 48px ICO frame to 256px PNG; Pillow LANCZOS"
+    }
+  ],
+  "desktop_adaptations": {
+    "primary_hover": "#3d5ce1",
+    "primary_pressed": "#3350c4",
+    "hover_dark_mix": 0.15,
+    "pressed_dark_mix": 0.3,
+    "light_surface_secondary_text": "#04143a",
+    "field_px": 12
+  }
+}

@@ -49,6 +49,7 @@ class Options:
     mapping_overwrite: bool = False
     log: RunLog | None = None
     skip_error_tables: bool = False
+    bypass_model: bool = False
 
 
 def run(options: Options, progress=lambda stage, amount, message: None, cancel: Event | None = None):
@@ -82,6 +83,8 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
 
     log.add("info", "import", "start", "", f"версия {__version__}; отрасль {options.industry}; "
             f"источник {source.suffix.lower()[1:] if source.is_file() else 'csv/xlsx'}")
+    if options.bypass_model:
+        log.add("info", "import", "without_model", "", "Эталон не применяется; числовые коды сохраняются, связи и ключи не проверяются.")
     project, store, exporter = None, None, None
     success, published, retain_output = False, False, False
     mapping_temp = None
@@ -93,7 +96,7 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
             raise Cancelled("Обработка отменена. Итоговый пакет не создан.")
 
     try:
-        with tempfile.TemporaryDirectory(prefix="snp-anonymizer-") as temp, Store(Path(temp) / "spool.sqlite", model) as store:
+        with tempfile.TemporaryDirectory(prefix="snp-anonymizer-") as temp, Store(Path(temp) / "spool.sqlite", model, bypass_model=options.bypass_model) as store:
             data_source = source
             if source.suffix.lower() == ".zip":
                 progress("import", 0, "Распаковка архива")
@@ -108,6 +111,7 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
             else:
                 parse_tabular(data_source, store, check, options.encoding, options.delimiter, options.csv_schema, callback,
                           skip_error_tables=options.skip_error_tables)
+            store.finish_import()
             store.flush()
             if options.schemas:
                 present = {name[0] for name in store.tables}
@@ -185,6 +189,10 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
             exporter.close(True)
             exporter = None
             report = {"format": "snp-anonymizer-report-v1", "app_version": __version__, "model": model.data["meta"],
+                      "model_applied": not options.bypass_model,
+                      "structure_mode": "automatic_without_model" if options.bypass_model else "standard",
+                      "relationships_checked": not options.bypass_model,
+                      "keys_checked": not options.bypass_model,
                       "industry": options.industry, "tables": len(store.tables), "rows": completed,
                       "changed_cells": transformer.changed, "sys_id": "omitted; generated in dump DDL",
                       "output_values_sha256": output_digest.hexdigest(), "validation": validations,

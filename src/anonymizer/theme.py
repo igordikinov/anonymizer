@@ -40,11 +40,12 @@ def install(root):
     scale = root.winfo_fpixels("1i") / 96
     px = lambda value: max(1, round(value * scale))
     faces = resolve_fonts(root)
-    body = (faces["body"], -px(14))
-    fonts = {"body": body, "caption": (faces["bold"], -px(11), "bold"),
-             "heading": (faces["semibold"], -px(16)),
-             "secondary": (faces["body"], -px(12)),
-             "button": (faces["semibold"], -px(14))}
+    body = (faces["body"], -px(ds.BODY_FONT_SIZE))
+    field = (faces["body"], -px(ds.FIELD_FONT_SIZE))
+    fonts = {"body": body, "field": field, "caption": (faces["bold"], -px(11), "bold"),
+             "heading": (faces["semibold"], -px(ds.HEADING_FONT_SIZE)),
+             "secondary": (faces["body"], -px(ds.HINT_FONT_SIZE)),
+             "button": (faces["semibold"], -px(ds.BUTTON_FONT_SIZE))}
     style = ttk.Style(root)
     style.theme_use("clam")
     images = []
@@ -53,7 +54,7 @@ def install(root):
     def element(name, radius, states, height=ds.CONTROL_HEIGHT):
         tiles = []
         for state, fill, border, stroke in states:
-            # Primary focus keeps a purple outer edge, then a white inset ring;
+            # Primary focus keeps a blue outer edge, then a white inset ring;
             # this remains a distinct outline on the white surrounding surface.
             outer = fill if name == "DS.Primary.TButton" and "focus" in state else None
             tile = _rounded(root, px(height), px(radius), fill, border, px(stroke),
@@ -94,8 +95,8 @@ def install(root):
         style.configure(name, background=bg, foreground=fg, font=font)
     for name, primary in [("TButton", False), ("Secondary.TButton", False), ("Primary.TButton", True)]:
         default = ds.BRAND if primary else ds.BG_SURFACE
-        active = ds.BRAND_HOVER if primary else ds.BG_CANVAS
-        pressed = ds.BRAND_ACTIVE if primary else ds.BG_CANVAS
+        active = ds.BRAND_HOVER if primary else ds.BG_HOVER
+        pressed = ds.BRAND_ACTIVE if primary else ds.BG_PRESSED
         border = ds.BRAND if primary else ds.BORDER_NEUTRAL
         image_name = "DS." + name
         element(image_name, ds.RADIUS_BUTTON, [
@@ -134,7 +135,7 @@ def install(root):
             # rounded border; its clam rectangle must not cover the corners.
             children[0][1]["children"].insert(0, ("Combobox.downarrow", {"side": "right", "sticky": "ns"}))
         style.layout(name, [(image_name, {"sticky": "nswe", "children": children})])
-        style.configure(name, font=body, padding=(px(ds.SPACE_S), px(ds.SPACE_XS)),
+        style.configure(name, font=field, padding=(px(ds.SPACE_S), px(ds.SPACE_XS)),
                         foreground=ds.TEXT_PRIMARY, fieldbackground=ds.BG_SURFACE,
                         background=ds.BG_SURFACE, lightcolor=ds.BG_SURFACE, darkcolor=ds.BG_SURFACE,
                         borderwidth=0, relief="flat",
@@ -147,10 +148,25 @@ def install(root):
                   lightcolor=[("disabled", ds.BG_DISABLED)], darkcolor=[("disabled", ds.BG_DISABLED)],
                   fieldbackground=[("disabled", ds.BG_DISABLED), ("readonly", ds.BG_SURFACE)],
                   foreground=[("disabled", ds.TEXT_DISABLED)])
-    root.option_add("*TCombobox*Listbox.font", body)
-    style.configure("TCheckbutton", background=ds.BG_SURFACE, foreground=ds.TEXT_PRIMARY, font=body)
-    style.map("TCheckbutton", background=[("active", ds.BG_SURFACE)])
-    style.configure("Horizontal.TProgressbar", background=ds.BRAND, troughcolor=ds.BG_CANVAS,
+    root.option_add("*TCombobox*Listbox.font", field)
+    root.option_add("*TCombobox*Listbox.background", ds.BG_SURFACE)
+    root.option_add("*TCombobox*Listbox.foreground", ds.TEXT_PRIMARY)
+    root.option_add("*TCombobox*Listbox.selectBackground", ds.BRAND)
+    root.option_add("*TCombobox*Listbox.selectForeground", ds.TEXT_ON_BRAND)
+    root.option_add("*TCombobox*Listbox.highlightColor", ds.BORDER_BRAND)
+    root.option_add("*TCombobox*Listbox.highlightBackground", ds.BG_SURFACE)
+    style.configure("TCheckbutton", background=ds.BG_SURFACE, foreground=ds.TEXT_PRIMARY, font=body,
+                    indicatorbackground=ds.BG_SURFACE, indicatorforeground=ds.BRAND,
+                    upperbordercolor=ds.BORDER_NEUTRAL, lowerbordercolor=ds.BORDER_NEUTRAL)
+    indicator_border = [("disabled", ds.BORDER_TERTIARY), ("focus", ds.BORDER_BRAND),
+                        ("pressed", ds.BRAND_ACTIVE), ("active", ds.BRAND_HOVER), ("selected", ds.BRAND)]
+    style.map("TCheckbutton", background=[("active", ds.BG_SURFACE)],
+              indicatorbackground=[("disabled", ds.BG_DISABLED), ("pressed", ds.BG_CANVAS),
+                                   ("alternate", ds.BRAND_100)],
+              indicatorforeground=[("disabled", ds.BUTTON_TEXT_DISABLED), ("pressed", ds.BRAND_ACTIVE),
+                                   ("active", ds.BRAND_HOVER), ("selected", ds.BRAND)],
+              upperbordercolor=indicator_border, lowerbordercolor=indicator_border)
+    style.configure("Horizontal.TProgressbar", background=ds.BRAND, troughcolor=ds.BRAND_300,
                     bordercolor=ds.BORDER_TERTIARY, lightcolor=ds.BRAND, darkcolor=ds.BRAND)
     style.configure("Vertical.TScrollbar", background=ds.BG_CANVAS, troughcolor=ds.BG_SURFACE,
                     bordercolor=ds.BG_SURFACE, arrowcolor=ds.TEXT_SECONDARY)

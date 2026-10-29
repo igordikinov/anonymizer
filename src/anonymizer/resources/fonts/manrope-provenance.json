@@ -1,0 +1,77 @@
+{
+  "source_archive": "resources/brand/frontend-brand.tgz",
+  "archive_sha256": "904780db9b8a39671939560e013793e043eb76de4be68e640803f282c8af0ce5",
+  "license": "SIL Open Font License 1.1",
+  "source_project": "https://github.com/sharanda/manrope",
+  "tools": {
+    "fonttools": "4.68.0",
+    "brotli": "1.2.1",
+    "zopfli": "0.4.3"
+  },
+  "recipe": "decode latin then cyrillic static subsets; FontTools Merger; uncompressed TTF; normalized GDI names; timestamps from source",
+  "required_characters": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя№—–…•«».,:;!?()/+-=_@% ",
+  "inputs": [
+    {
+      "archive_member": "frontend-brand/files/projects/scp-shell/src/assets/fonts/manrope/manrope-latin-400-normal.woff2",
+      "bytes": 14108,
+      "sha256": "849290ef12a2eeb9af5c11924120d11aa4ae8b435ed3347d7fc8bc240c293ca3"
+    },
+    {
+      "archive_member": "frontend-brand/files/projects/scp-shell/src/assets/fonts/manrope/manrope-cyrillic-400-normal.woff2",
+      "bytes": 7840,
+      "sha256": "5a987d1484070f1ea54de7c10ebfa4057a18e379361dbe5fd5c4fa4c2d95ef39"
+    },
+    {
+      "archive_member": "frontend-brand/files/projects/scp-shell/src/assets/fonts/manrope/manrope-latin-600-normal.woff2",
+      "bytes": 14172,
+      "sha256": "f7ac6258da20ab7541939b59851155753d1d24f1b30cbcb949077a3faa3d1593"
+    },
+    {
+      "archive_member": "frontend-brand/files/projects/scp-shell/src/assets/fonts/manrope/manrope-cyrillic-600-normal.woff2",
+      "bytes": 7872,
+      "sha256": "80b86efbef1c9fb66557cc4cc7b6db42db2fd631f1a9b8735f3bbefbb5128799"
+    },
+    {
+      "archive_member": "frontend-brand/files/projects/scp-shell/src/assets/fonts/manrope/manrope-latin-700-normal.woff2",
+      "bytes": 14212,
+      "sha256": "d2a12c85a831e4b5db341767d0347fa3d1361d22a1fcb3e361a16b6c90080f71"
+    },
+    {
+      "archive_member": "frontend-brand/files/projects/scp-shell/src/assets/fonts/manrope/manrope-cyrillic-700-normal.woff2",
+      "bytes": 7852,
+      "sha256": "2ad647b9159d27d27f4999b30598f92e60449fb20d80803bc7b85afafbb446d5"
+    }
+  ],
+  "files": [
+    {
+      "name": "Manrope-Regular.ttf",
+      "bytes": 53228,
+      "sha256": "0015ec8911ded2774063ef8128548cec0bcb668d9b88b4f1f4c0fdab5a3f32ba",
+      "weight": 400,
+      "unicode_count": 317,
+      "gdi_family": "InPlan Desktop Manrope"
+    },
+    {
+      "name": "Manrope-SemiBold.ttf",
+      "bytes": 53244,
+      "sha256": "6de88918ff6b1622ebd36f1f86dd0109abe998637107382fbba9409c64ee26e1",
+      "weight": 600,
+      "unicode_count": 317,
+      "gdi_family": "InPlan Desktop Manrope SemiBold"
+    },
+    {
+      "name": "Manrope-Bold.ttf",
+      "bytes": 53124,
+      "sha256": "396f0fde858faa7f94d91e69681a397d4a10842a2fb90502e19bdb9933a43159",
+      "weight": 700,
+      "unicode_count": 317,
+      "gdi_family": "InPlan Desktop Manrope"
+    },
+    {
+      "name": "Manrope-OFL.txt",
+      "bytes": 4383,
+      "sha256": "d826ab6583b12c26807d8716a545bdbbb672df04f48608a364ba9efdbe501c30",
+      "archive_member": "frontend-brand/files/projects/scp-shell/src/assets/fonts/manrope/OFL.txt"
+    }
+  ]
+}

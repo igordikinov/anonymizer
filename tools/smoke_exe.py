@@ -20,16 +20,24 @@ def check(exe):
         subprocess.run([str(exe), "--smoke-gui", "--smoke-gui-report", str(root / "gui.json")], check=True, **kwargs)
         gui = json.loads((root / "gui.json").read_text(encoding="utf-8"))
         assert gui["fonts"]["resolved"]["bundled"], "EXE used a system fallback instead of its bundled fonts"
-        assert gui["fonts"]["actual"]["body"]["family"].casefold() == "open sans"
-        assert gui["fonts"]["actual"]["heading"]["family"].casefold() == "open sans semibold"
-        assert gui["fonts"]["actual"]["button"]["family"].casefold() == "open sans semibold"
-        assert all(font["family"].casefold() == "open sans" for font in gui["fonts"]["widgets"].values())
+        faces = gui["fonts"]["selected_faces"]
+        assert {role: row["weight"] for role, row in faces.items()} == {"body": 400, "semibold": 600, "bold": 700}
+        assert all(row["matches_bundled"] for row in faces.values()), "GDI selected a system font instead of a bundled static face"
+        assert gui["fonts"]["actual"]["body"]["family"].casefold() == "inplan desktop manrope"
+        assert gui["fonts"]["actual"]["heading"]["family"].casefold() == "inplan desktop manrope semibold"
+        assert gui["fonts"]["actual"]["button"]["family"].casefold() == "inplan desktop manrope semibold"
+        assert all(font == gui["fonts"]["actual"]["field"] for font in gui["fonts"]["widgets"].values())
+        assert gui["fonts"]["popdowns"] and all(
+            font == gui["fonts"]["actual"]["field"] for font in gui["fonts"]["popdowns"].values())
+        assert gui["fonts"]["actual"]["field"]["family"].casefold() == "inplan desktop manrope"
+        for role, pixels in [("field", 12), ("body", 14), ("button", 14), ("heading", 16), ("caption", 11)]:
+            assert gui["fonts"]["configured_pixels"][role] == round(pixels * gui["scale"])
         expected_height = round(40 * gui["scale"])
         assert all(height == expected_height for height in gui["heights"].values()), gui["heights"]
         assert all(height == expected_height for height in gui["actual_heights"].values()), gui["actual_heights"]
         assert gui["radii"] == {"button": 4, "input": 5, "card": 8}
-        assert gui["states"]["Primary.TButton"]["disabled active pressed"] == "#f5f6f8"
-        assert gui["states"]["Primary.TButton"]["pressed active"] == "#4f0096"
+        assert gui["states"]["Primary.TButton"]["disabled active pressed"] == "#f4f6fa"
+        assert gui["states"]["Primary.TButton"]["pressed active"] == "#3350c4"
         source = root / "source.sql"
         source.write_text("CREATE TABLE public.item(sys_id bigint, item text, proddescr text, volume numeric); INSERT INTO public.item VALUES (789,'PRIVATE_CODE','PRIVATE_DESCRIPTION',12345.678901);", encoding="utf-8")
         subprocess.run([str(exe), "--input", str(source), "--output", str(root / "out"), "--project", str(root / "client.snpanon"), "--industry", "chem"], check=True, **kwargs)
@@ -132,7 +140,38 @@ def check(exe):
         skipped = json.loads((root / "xlsx-skip-out/report.json").read_text(encoding="utf-8"))
         assert skipped["rows"] == 2 and skipped["tables"] == 2
         assert [table["table"] for table in skipped["skipped_tables"]] == ["public.item"]
-        print("EXE smoke: bundled Open Sans, DS, SQL/CSV/XLSX file/folder/ZIP, exact numbers, formula rejection and table skip passed; no Python on child PATH")
+        bypass_source = root / "bypass-source"
+        bypass_source.mkdir()
+        (bypass_source / "sku.csv").write_text(
+            "note,order_id,qty,day,uom,abc,activeflag,sys_id\n"
+            "SYN_GENERIC_PRIVATE,999,1234567890.123456789,2026-10-29,kg,A,Y,777\n", encoding="utf-8")
+        from datetime import date
+        book = Workbook(iso_dates=True)
+        book.active.append(["code", "qty", "day"])
+        book.active.append(["123", 42.125, date(2026, 10, 29)])
+        book.save(bypass_source / "custom.xlsx")
+        book.close()
+        for index in (1, 2):
+            output = root / f"bypass-out-{index}"
+            subprocess.run([str(exe), "--input", str(bypass_source), "--output", str(output),
+                            "--project", str(root / "bypass.snpanon"), "--bypass-model"], check=True, **kwargs)
+            report = json.loads((output / "report.json").read_text(encoding="utf-8"))
+            assert report["tables"] == report["rows"] == 2
+            assert not report["model_applied"] and not report["relationships_checked"] and not report["keys_checked"]
+            assert report["validation"]["preserved_fields_equal"]
+            manifest = json.loads((output / "csv/manifest.json").read_text(encoding="utf-8"))
+            for entry in manifest["tables"]:
+                with (output / "csv" / entry["file"]).open(encoding="utf-8", newline="") as stream:
+                    row, = list(csv.DictReader(stream))
+                assert row["day"] == "2026-10-29"
+                assert "sys_id" not in row
+                if entry["table"] == "sku":
+                    assert row["order_id"] == "999" and row["qty"] == "1234567890.123456789"
+                    assert row["note"] != "SYN_GENERIC_PRIVATE" and row["uom"] != "kg" and row["abc"] != "A" and row["activeflag"] != "Y"
+                else:
+                    assert row["code"] != "123" and row["qty"] == "42.125"
+        assert (root / "bypass-out-1/dump.sql").read_bytes() == (root / "bypass-out-2/dump.sql").read_bytes()
+        print("EXE smoke: bundled Manrope with 12px fields, brand DS, SQL/CSV/XLSX file/folder/ZIP, exact numbers, formula/skip and full model bypass passed; no Python on child PATH")
 
 
 if __name__ == "__main__":

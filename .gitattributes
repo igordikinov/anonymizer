@@ -1,0 +1,5 @@
+# Resource hashes and archive identity require byte-preserving checkouts.
+# Accept preserved CRLF while retaining the normal whitespace checks.
+src/anonymizer/resources/ds/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+src/anonymizer/resources/fonts/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+resources/brand/** -text

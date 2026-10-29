@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal, DecimalException, localcontext
 from pathlib import Path, PurePosixPath
 import posixpath
@@ -14,6 +14,7 @@ import zipfile
 from xml.parsers import expat
 
 from .errors import AnonymizerError, Cancelled
+from .generic_input import InputLimitError
 from .sql_reader import MAX_FIELD
 from .validation import validate_value
 
@@ -285,6 +286,89 @@ def _relationships(package, part, base):
     return result
 
 
+def _styles(package, relationships):
+    """Only generic import needs format-based date types; never materialize styles XML."""
+    parts = [part for kind, part in relationships.values() if kind == REL + "/styles"]
+    if len(parts) > 1:
+        _fail("повторяющиеся стили книги")
+    if not parts:
+        return [None]
+    from openpyxl.styles.numbers import BUILTIN_FORMATS, STRIP_RE, is_datetime, is_timedelta_format
+    custom, formats = {}, []
+    in_cell_xfs = False
+    memory = 0
+
+    def number(value):
+        if not re.fullmatch(r"[0-9]{1,10}", value):
+            _fail("некорректный номер формата ячейки")
+        return int(value)
+
+    def start(tag, attrs):
+        nonlocal in_cell_xfs, memory
+        if tag == MAIN + "|numFmt":
+            index = number(attrs.get("numFmtId", ""))
+            fmt = attrs.get("formatCode")
+            if fmt is None or index in custom:
+                _fail("некорректное описание формата ячейки")
+            memory += len(fmt) * 4 + 256
+            if memory > MAX_METADATA:
+                _limit()
+            custom[index] = fmt
+        elif tag == MAIN + "|cellXfs":
+            if in_cell_xfs or formats:
+                _fail("некорректная структура стилей ячеек")
+            in_cell_xfs = True
+        elif tag == MAIN + "|xf" and in_cell_xfs:
+            memory += 128
+            if memory > MAX_METADATA:
+                _limit()
+            formats.append(number(attrs.get("numFmtId", "0")))
+
+    def end(tag):
+        nonlocal in_cell_xfs
+        if tag == MAIN + "|cellXfs":
+            in_cell_xfs = False
+
+    package.xml(parts[0], start, end, metadata=True)
+    kinds = []
+    for index in formats:
+        fmt = custom.get(index, BUILTIN_FORMATS.get(index))
+        if fmt is None:
+            _fail("неизвестный формат ячейки")
+        if is_timedelta_format(fmt):
+            kinds.append("DURATION")
+            continue
+        # Ignore literals and escaped characters when deciding date vs time.
+        clean = STRIP_RE.sub("", fmt.split(";", 1)[0]).lower()
+        clean = re.sub(r"[_\\*].", "", clean)
+        kind = is_datetime(clean)
+        has_meridiem = bool(re.search(r"am/pm|a/p", clean))
+        if has_meridiem:
+            kind = "datetime" if kind == "date" else kind or "time"
+        # Excel uses an isolated m/mm/mmm/... token for a calendar month.
+        # openpyxl calls month-only formats "time" because they lack d/y.
+        # Minute formats also contain an hour or second token (h:mm, mm:ss).
+        month_tokens = re.sub(r"am/pm|a/p", "", clean)
+        if kind == "time" and "m" in month_tokens and not any(token in month_tokens for token in "hs"):
+            kind = "datetime" if has_meridiem else "date"
+        kinds.append({"date": "DATE", "time": "TIME", "datetime": "DATE_TIME"}.get(kind))
+    return kinds or [None]
+
+
+def _iso_kind(value):
+    try:
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            date.fromisoformat(value)
+            return "DATE"
+        if "T" in value or " " in value:
+            datetime.fromisoformat(value)
+            return "DATE_TIME"
+        time.fromisoformat(value)
+        return "TIME"
+    except ValueError:
+        _fail("некорректная ISO-дата ячейки")
+
+
 def _read(path, store, check, schema, table):
     name = schema, table
     package = _Package(path, check)
@@ -333,14 +417,16 @@ def _read(path, store, check, schema, table):
                     _fail()
                 if shared:
                     strings.load(package, shared[0])
-                _worksheet(package, worksheet, strings, store, name, epoch, check)
+                styles = _styles(package, relationships) if store.bypass_model else None
+                _worksheet(package, worksheet, strings, store, name, epoch, check, styles)
             finally:
                 strings.close()
     finally:
         package.close()
 
 
-def _worksheet(package, part, strings, store, name, epoch, check):
+def _worksheet(package, part, strings, store, name, epoch, check, styles=None):
+    generic = store.bypass_model
     header = None
     kept = []
     fields = {}
@@ -350,6 +436,16 @@ def _worksheet(package, part, strings, store, name, epoch, check):
     capture, in_cell, in_row, phonetic = False, False, False, 0
     seen_value, in_inline, seen_inline = False, False, False
     row_bytes, cell_buffer_bytes = 0, 0
+    row_style, cell_style = None, None
+    column_styles, row_styles = {}, {}
+
+    def style_number(value):
+        if not re.fullmatch(r"[0-9]{1,10}", value):
+            problem("некорректный номер стиля ячейки")
+        index = int(value)
+        if index >= len(styles):
+            problem("неизвестный стиль ячейки")
+        return index
 
     def problem(message, coordinate=None):
         suffix = f", ячейка {coordinate}" if coordinate else ""
@@ -358,6 +454,7 @@ def _worksheet(package, part, strings, store, name, epoch, check):
     def start(tag, attrs):
         nonlocal row, row_number, previous_col, cell, cell_type, cell_parts, cell_size
         nonlocal capture, in_cell, in_row, row_bytes, phonetic, seen_value, in_inline, seen_inline, cell_buffer_bytes
+        nonlocal row_style, cell_style, row_styles
         if tag == MAIN + "|row":
             if in_row:
                 problem("вложенные строки запрещены")
@@ -368,6 +465,9 @@ def _worksheet(package, part, strings, store, name, epoch, check):
             if row_number <= previous_row or row_number > 1048576:
                 problem("неверный порядок строк")
             row, previous_col, row_bytes, in_row = {}, 0, 0, True
+            if generic:
+                row_style = style_number(attrs["s"]) if "s" in attrs else None
+                row_styles = {}
         elif tag == MAIN + "|c":
             if not in_row or in_cell:
                 problem("некорректная структура ячеек")
@@ -381,6 +481,9 @@ def _worksheet(package, part, strings, store, name, epoch, check):
             if col <= previous_col or col > 16384:
                 problem("неверный порядок колонок")
             previous_col = col
+            if generic:
+                cell_style = style_number(attrs["s"]) if "s" in attrs else (
+                    row_style if row_style is not None else column_styles.get(col, 0))
             cell = reference
             cell_type = attrs.get("t", "n")
             if cell_type not in {"n", "s", "inlineStr", "str", "b", "d", "e"}:
@@ -391,6 +494,17 @@ def _worksheet(package, part, strings, store, name, epoch, check):
             seen_value, in_inline, seen_inline = False, False, False
         elif tag == MAIN + "|f":
             problem("формулы не поддерживаются", cell)
+        elif generic and tag == MAIN + "|col" and "style" in attrs:
+            raw_min, raw_max = attrs.get("min", ""), attrs.get("max", "")
+            if (not re.fullmatch(r"[1-9][0-9]{0,4}", raw_min)
+                    or not re.fullmatch(r"[1-9][0-9]{0,4}", raw_max)):
+                problem("некорректный диапазон стиля колонок")
+            first, last = int(raw_min), int(raw_max)
+            if not 1 <= first <= last <= 16384 or previous_row:
+                problem("некорректный диапазон стиля колонок")
+            style = style_number(attrs["style"])
+            for column in range(first, last + 1):
+                column_styles[column] = style
         elif tag == MAIN + "|mergeCell":
             problem("объединённые ячейки не поддерживаются")
         elif tag == MAIN + "|sheetProtection":
@@ -444,6 +558,8 @@ def _worksheet(package, part, strings, store, name, epoch, check):
             if row_bytes > MAX_FIELD:
                 _limit()
             row[previous_col] = value, cell_type, cell
+            if generic:
+                row_styles[previous_col] = styles[cell_style]
             in_cell = False
         elif tag == MAIN + "|row":
             check()
@@ -461,7 +577,10 @@ def _worksheet(package, part, strings, store, name, epoch, check):
                     header.append(value)
                 if len(set(header)) != len(header):
                     problem("повторяющиеся колонки")
-                store.define(name, store.model.fields(name[1]), from_model=True)
+                if generic:
+                    store.define_input(name, header)
+                else:
+                    store.define(name, store.model.fields(name[1]), from_model=True)
                 selected = set(store.ensure(name, header))
                 kept = [(i + 1, col) for i, col in enumerate(header) if col in selected]
                 fields = {f["name"]: f for f in store.tables.get(name, {}).get("fields", ())}
@@ -473,9 +592,29 @@ def _worksheet(package, part, strings, store, name, epoch, check):
                     if any(index > len(header) and value is not None for index, (value, _, _) in row.items()):
                         problem("данные за пределами заголовка")
                     values = []
+                    native_types = []
                     for index, column in kept:
                         value, typ, coordinate = row.get(index, (None, None, None))
                         field = fields[column]
+                        if generic:
+                            native = {"n": "NUMBER", "b": "BOOLEAN"}.get(typ, "TEXT")
+                            if value == r"\N":
+                                value = None
+                            if value is not None:
+                                if typ == "n" and row_styles.get(index):
+                                    native = row_styles[index]
+                                    if native == "DURATION":
+                                        problem("формат длительности не поддерживается", coordinate)
+                                    value = _date_value(value, native, epoch)
+                                elif typ == "d":
+                                    native = _iso_kind(value)
+                                elif typ == "b":
+                                    if value not in {"0", "1"}:
+                                        problem("некорректное логическое значение", coordinate)
+                                    value = {"0": "false", "1": "true"}[value]
+                            values.append(value)
+                            native_types.append(native if value is not None else None)
+                            continue
                         if value == r"\N" or (value == "" and field["type"] in {"NUMBER", "INTEGER"} and field.get("nullable", True)):
                             value = None
                         if value is not None:
@@ -490,11 +629,15 @@ def _worksheet(package, part, strings, store, name, epoch, check):
                         except AnonymizerError:
                             problem("значение не соответствует типу или размеру поля", coordinate)
                         values.append(value)
+                    if generic:
+                        store.observe_input(name, values, native_types=native_types)
                     store.add_row(name, [col for _, col in kept], values)
             previous_row, in_row = row_number, False
     package.xml(part, start, end, text)
     if header is None:
         problem("отсутствует заголовок")
+    if generic:
+        store.finish_input(name, check)
 
 
 def parse_xlsx(path, store, check=lambda: None, schema="public", progress=lambda n: None,
@@ -506,7 +649,7 @@ def parse_xlsx(path, store, check=lambda: None, schema="public", progress=lambda
     try:
         check()
         _read(path, store, check, schema, table)
-    except (Cancelled, XLSXLimitError):
+    except (Cancelled, XLSXLimitError, InputLimitError):
         raise
     except (AnonymizerError, OSError, ValueError, RuntimeError, NotImplementedError,
             zipfile.BadZipFile, expat.ExpatError, OverflowError) as error:

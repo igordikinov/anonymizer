@@ -1,4 +1,26 @@
-Токены (colors/typography/spacing/base/fonts.css) извлечены из C:/Git/scg/In.Plan Design System.zip — тот же бандл in-plan-design-system-0a4cef78, что вендорит фронтенд (mrp-cockpit/web/src/styles/ds-tokens, bom-screen). Канонический источник продукта: Open Sans, бренд #9000ff, поверхности #ffffff/#f5f6f8.
-Логотипы (header-logo-in.png, logo-in.png) — из того же архива (assets/*).
-Презентационная версия DS (C:/Git/snp-architecture/In.Plan Design System.zip, Manrope/чёрные слайды) — другой срез системы, для UI продукта не применяется.
-Не редактировать руками — перегенерировать из архива.
+Active In.Plan desktop brand: resources/brand/frontend-brand.tgz, provided 2026-10-29.
+Archive SHA256: 904780db9b8a39671939560e013793e043eb76de4be68e640803f282c8af0ce5.
+
+brand.scss, brand-palette.ts and header-logo-in.png are byte-identical archive members.
+packaging/app-icon.ico is the original favicon.ico; app-icon.png is the largest
+48px frame resampled to 256px with Pillow LANCZOS. See brand-provenance.json.
+
+Active palette: primary #4769ff, dark chrome/text #04143a, canvas #f4f6fa,
+white cards and fields. Desktop secondary text uses dark neutral #04143a
+instead of the web overlay's near-white content-secondary on a light surface.
+Primary hover #3d5ce1 and pressed #3350c4 are explicit desktop adaptations:
+85/15 and 70/30 RGB mixes of primary/dark, rounded to nearest byte.
+Status palette comes from brand-palette.ts (norm, warning, problem, accent, neutral).
+Neutral borders/disabled-button text, dimensions and corners inherit the base DS.
+
+The older colors/typography/spacing/base/fonts.css and logo-in.png remain the
+unchanged foundational snapshot from C:/Git/scg/In.Plan Design System.zip.
+Their purple/Open Sans values are historical source data, not active GUI colors.
+The new brand supersedes the earlier product/presentation style distinction.
+
+Primary fonts are Manrope 400/600/700, decoded and merged from the supplied
+Latin/Cyrillic WOFF2 subsets with app-private InPlan Desktop Manrope GDI aliases.
+Private aliases prevent collisions with installed variable Manrope fonts. See fonts/manrope-provenance.json.
+Original Open Sans files and license remain the bundled fallback.
+Generate resources with tools/prepare_brand.py in the pinned build-only environment;
+do not hand-edit binary resources or generated manifests.

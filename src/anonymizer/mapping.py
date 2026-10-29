@@ -22,6 +22,7 @@ INDUSTRIES = {
 PREFIX = {("item", "item"): "ITEM", ("loc", "loc"): "LOC", ("res", "res"): "RES", ("prodsource_sp", "prodsource"): "PS", ("demand_stream", "dmdstream"): "DS"}
 UNITS = {"KG", "G", "T", "TON", "L", "ML", "HL", "M", "M2", "M3", "CM", "MM", "PC", "PCS", "EA", "ST", "H", "HR", "MIN", "S", "PAL", "BOX", "ШТ", "КГ", "Л", "М"}
 FLAGS = {"", "X", "0", "1", "Y", "N", "true", "false", "TRUE", "FALSE", "x"}
+MAX_GENERIC_RETRIES = 1024
 DESCRIPTIONS = {"proddescr": ("item", "item"), "locdescr": ("loc", "loc"), "resdescr": ("res", "res"),
                 "prodsourcedescr": ("prodsource_sp", "prodsource"), "dmdstreamdescr": ("demand_stream", "dmdstream")}
 
@@ -53,7 +54,8 @@ class Project:
         self.industry, self.cache, self.counters, self.cache_bytes = industry, OrderedDict(), {}, 0
         self.db.execute("BEGIN")
 
-    def pseudonym(self, domain, original, length=None, root=None, uuid_type=False, label=None, numeric=False):
+    def pseudonym(self, domain, original, length=None, root=None, uuid_type=False, label=None, numeric=False,
+                  avoid_original=False):
         if numeric:
             original = canonical.numeric(original)
         elif uuid_type:
@@ -71,7 +73,10 @@ class Project:
                     self.counters[domain] = self.db.execute("SELECT COALESCE(MAX(ordinal),0) FROM mapping WHERE domain=?", (domain,)).fetchone()[0]
                 self.counters[domain] += 1
                 ordinal = self.counters[domain]
-                if numeric:
+                if avoid_original and not numeric and not uuid_type:
+                    value, ordinal = self._fresh_text(domain, original, length, root, label, ordinal)
+                    self.counters[domain] = ordinal
+                elif numeric:
                     candidate = ordinal
                     while canonical.numeric(str(candidate)) == original or self.db.execute("SELECT 1 FROM mapping WHERE domain=? AND new=?", (domain, str(candidate))).fetchone():
                         candidate += 1
@@ -105,6 +110,22 @@ class Project:
                 (removed_domain, removed_old), (removed_value, _) = self.cache.popitem(last=False)
                 self.cache_bytes -= (len(removed_domain) + len(removed_old) + len(removed_value)) * 4
         return value
+
+    def _fresh_text(self, domain, original, length, root, label, ordinal):
+        # A short field has a finite code space. Bound both arithmetic and SQL
+        # probes, and never insert/cache a candidate equal to its source value.
+        space = 36 ** length if length and length <= 6 else None
+        attempts = min(MAX_GENERIC_RETRIES, space) if space else MAX_GENERIC_RETRIES
+        for _ in range(attempts):
+            value = self.label(label, ordinal) if label else PREFIX.get(root, "A") + f"{ordinal:06d}"
+            if length and len(value) > length:
+                value = base36(ordinal % space if space else ordinal)
+                if len(value) > length:
+                    break
+            if value != original and not self.db.execute("SELECT 1 FROM mapping WHERE domain=? AND new=?", (domain, value)).fetchone():
+                return value, ordinal
+            ordinal += 1
+        raise AnonymizerError("Недостаточно уникальных замен для длины текстового поля.")
 
     def label(self, kind, n):
         if kind == "item":
@@ -151,6 +172,10 @@ class Transformer:
         col = field["name"]
         if col == "sys_id":
             return "omit"
+        if self.store and self.store.bypass_model:
+            if field["type"] in {"NUMBER", "INTEGER", "BOOLEAN", "DATE", "DATE_TIME", "TIME"}:
+                return "preserve"
+            return "json" if field["type"] == "JSONB" else "uuid" if field["type"] == "UUID" else "text"
         if field["type"] in {"NUMBER", "INTEGER"}:
             rschema, *root = self.store.root(schema, table, col) if self.store and schema else (schema, *self.model.root(table, col))
             root = tuple(root)
@@ -182,6 +207,15 @@ class Transformer:
                 continue
             if old is None or old == "" or rule == "preserve":
                 value = old
+            elif self.store and self.store.bypass_model:
+                domain = f"generic:{schema}:{table}.{col}"
+                if rule == "json":
+                    value = json_data.dump(self.json_transform(json_data.load(old), schema, table, col))
+                else:
+                    value = self.project.pseudonym(domain, old, field.get("length"), uuid_type=rule == "uuid",
+                                                   label=None if rule == "uuid" else "text", avoid_original=rule == "text")
+                    if value == old:
+                        raise AnonymizerError(f"Таблица {table}, колонка {col}: замена совпала с исходным текстом. Нужен другой проект.")
             elif rule == "json":
                 value = json_data.dump(self.json_transform(json_data.load(old), schema, table, col))
             elif rule in {"uuid", "numeric-id"}:
@@ -213,21 +247,24 @@ class Transformer:
 
     def json_transform(self, value, schema, table, column, key=None):
         technical_keys = {"qty", "quantity", "date", "cost", "price", "item", "loc", "res", "comp", "key", "value", "name", "description", "data", "values", "rows", "columns", "properties", "enabled", "version", "start", "end"}
-        domain = f"{schema}:{table}.{column}:json"
+        generic = bool(self.store and self.store.bypass_model)
+        domain = ("generic:" if generic else "") + f"{schema}:{table}.{column}:json"
 
         def replaced(original, *args, **kwargs):
+            if generic:
+                kwargs["avoid_original"] = True
             replacement = self.project.pseudonym(*args, **kwargs)
             if replacement == original:
                 raise AnonymizerError(f"Таблица {table}, колонка {column}: сгенерированная замена JSON совпала с исходным текстом. Нужен другой проект.")
             return replacement
 
         if isinstance(value, dict):
-            return {(k if k in technical_keys else replaced(k, domain + ":keys", k)): self.json_transform(v, schema, table, column, k) for k, v in value.items()}
+            return {(k if k in technical_keys and not generic else replaced(k, domain + ":keys", k)): self.json_transform(v, schema, table, column, k) for k, v in value.items()}
         if isinstance(value, list):
             return [self.json_transform(v, schema, table, column, key) for v in value]
         if isinstance(value, json_data.Number) or not isinstance(value, str) or not value or json_data.is_date(value):
             return value
-        if key in {"item", "loc", "res", "comp"}:
+        if not generic and key in {"item", "loc", "res", "comp"}:
             root = self.model.root(table, key)
             return replaced(value, f"{schema}:{root[0]}.{root[1]}", value, root=root)
         return replaced(value, domain + ":values", value, label="text")
