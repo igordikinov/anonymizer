@@ -134,9 +134,9 @@ def test_unicode_escape_decodes_before_replacement(tmp_path):
 
 
 def test_replacement_colliding_with_original_is_blocked(tmp_path):
-    # "A000001" is the first generated key replacement; "Атрибут 0001" the first
+    # "A000001" is the first generated key replacement; "Attribute 0001" the first
     # text replacement. Either must block instead of leaking the original text.
-    for payload in ['{"A000001":1}', '{"description":"Атрибут 0001"}']:
+    for payload in ['{"A000001":1}', '{"description":"Attribute 0001"}']:
         tmp = tmp_path / f"case{len(payload)}"
         with pytest.raises(AnonymizerError, match="совпала"):
             transformed_json(tmp, payload)

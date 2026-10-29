@@ -13,11 +13,11 @@ from . import json_data
 from . import canonical
 
 INDUSTRIES = {
-    "food": {"title": "Пищевая промышленность", "products": ["Шоколад молочный", "Печенье овсяное", "Конфеты сливочные", "Какао-порошок", "Сахар", "Масло какао", "Упаковка картонная", "Сироп ванильный"]},
-    "brewery": {"title": "Напитки", "products": ["Напиток янтарный", "Напиток светлый", "Квас классический", "Вода газированная", "Солод светлый", "Хмель ароматный", "Бутылка стеклянная", "Банка алюминиевая"]},
-    "chem": {"title": "Химическая промышленность", "products": ["Краска интерьерная", "Грунтовка универсальная", "Смола базовая", "Растворитель", "Пигмент белый", "Лак защитный", "Ведро пластиковое", "Покрытие полимерное"]},
-    "consumer": {"title": "Потребительские товары", "products": ["Средство для стирки", "Мыло жидкое", "Шампунь мягкий", "Гель для уборки", "Сырьё моющее", "Отдушка цветочная", "Флакон пластиковый", "Короб транспортный"]},
-    "industrial": {"title": "Машиностроение", "products": ["Насос центробежный", "Клапан регулирующий", "Корпус литой", "Вал приводной", "Подшипник", "Лист стальной", "Комплект крепежа", "Двигатель электрический"]},
+    "food": {"title": "Пищевая промышленность", "products": ["Milk chocolate", "Oat cookies", "Cream candy", "Cocoa powder", "Sugar", "Cocoa butter", "Carton packaging", "Vanilla syrup"]},
+    "brewery": {"title": "Напитки", "products": ["Amber drink", "Light drink", "Classic kvass", "Sparkling water", "Light malt", "Aroma hops", "Glass bottle", "Aluminum can"]},
+    "chem": {"title": "Химическая промышленность", "products": ["Interior paint", "Universal primer", "Base resin", "Solvent", "White pigment", "Protective lacquer", "Plastic bucket", "Polymer coating"]},
+    "consumer": {"title": "Потребительские товары", "products": ["Laundry detergent", "Liquid soap", "Mild shampoo", "Cleaning gel", "Detergent base", "Fragrance", "Plastic bottle", "Transport carton"]},
+    "industrial": {"title": "Машиностроение", "products": ["Centrifugal pump", "Control valve", "Cast housing", "Drive shaft", "Bearing", "Steel sheet", "Fastener kit", "Electric motor"]},
 }
 PREFIX = {("item", "item"): "ITEM", ("loc", "loc"): "LOC", ("res", "res"): "RES", ("prodsource_sp", "prodsource"): "PS", ("demand_stream", "dmdstream"): "DS"}
 UNITS = {"KG", "G", "T", "TON", "L", "ML", "HL", "M", "M2", "M3", "CM", "MM", "PC", "PCS", "EA", "ST", "H", "HR", "MIN", "S", "PAL", "BOX", "ШТ", "КГ", "Л", "М"}
@@ -25,6 +25,11 @@ FLAGS = {"", "X", "0", "1", "Y", "N", "true", "false", "TRUE", "FALSE", "x"}
 MAX_GENERIC_RETRIES = 1024
 DESCRIPTIONS = {"proddescr": ("item", "item"), "locdescr": ("loc", "loc"), "resdescr": ("res", "res"),
                 "prodsourcedescr": ("prodsource_sp", "prodsource"), "dmdstreamdescr": ("demand_stream", "dmdstream")}
+
+
+def _check_latin(value):
+    if not isinstance(value, str) or not value.isascii():
+        raise AnonymizerError("Замена содержит нелатинские символы. Создайте новый проект .snpanon; прежняя карта замен не изменена.")
 
 
 class Project:
@@ -63,11 +68,13 @@ class Project:
         key = (domain, original)
         if key in self.cache:
             value, ordinal = self.cache[key]
+            _check_latin(value)
             self.cache.move_to_end(key)
         else:
             found = self.db.execute("SELECT new,ordinal FROM mapping WHERE domain=? AND old=?", key).fetchone()
             if found:
                 value, ordinal = found
+                _check_latin(value)
             else:
                 if domain not in self.counters:
                     self.counters[domain] = self.db.execute("SELECT COALESCE(MAX(ordinal),0) FROM mapping WHERE domain=?", (domain,)).fetchone()[0]
@@ -98,6 +105,7 @@ class Project:
                         value = base36(ordinal)
                     if len(value) > length:
                         raise AnonymizerError("Недостаточная длина текстового поля для уникальных замен.")
+                _check_latin(value)
                 try:
                     self.db.execute("INSERT INTO mapping VALUES (?,?,?,?)", (domain, original, value, ordinal))
                 except sqlite3.IntegrityError:
@@ -131,19 +139,17 @@ class Project:
     def label(self, kind, n):
         if kind == "item":
             pool = INDUSTRIES[self.industry]["products"]
-            return f"{pool[(n-1) % len(pool)]} — серия {n:04d}"
-        prefix = {"loc": "Площадка Север", "res": "Линия производства", "prodsource_sp": "Технологический маршрут", "demand_stream": "Канал Регион", "brand": "Марка Альта", "category": "Группа продукции", "supplier": "Поставщик Вектор", "planner": "Планировщик", "address": "Улица Промышленная", "text": "Атрибут"}.get(kind, "Атрибут")
+            return f"{pool[(n-1) % len(pool)]} - series {n:04d}"
+        prefix = {"loc": "North site", "res": "Production line", "prodsource_sp": "Process route", "demand_stream": "Regional channel", "brand": "Alta brand", "category": "Product group", "supplier": "Vector supplier", "planner": "Planner", "address": "Industrial street", "text": "Attribute"}.get(kind, "Attribute")
         return f"{prefix} {n:04d}"
 
     def iter_mapping(self):
-        """Streams (domain, old, new) rows in batches; uncommitted data included."""
+        """Stream checked mappings one row at a time; originals retain Unicode."""
         cursor = self.db.execute("SELECT domain, old, new FROM mapping ORDER BY domain, ordinal")
         try:
-            while True:
-                batch = cursor.fetchmany(1000)
-                if not batch:
-                    break
-                yield from batch
+            for domain, old, new in cursor:
+                _check_latin(new)
+                yield domain, old, new
         finally:
             cursor.close()
 

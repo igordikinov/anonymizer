@@ -12,7 +12,7 @@ from unittest.mock import patch
 import pytest
 from openpyxl import load_workbook
 
-from anonymizer.errors import AnonymizerError
+from anonymizer.errors import AnonymizerError, Cancelled
 from anonymizer.mapping_export import ROWS_PER_SHEET, cell_value, write_mapping_xlsx
 from anonymizer.pipeline import Options, run
 
@@ -20,6 +20,43 @@ SOURCE = """
       CREATE TABLE public.item(item text PRIMARY KEY, note text);
       INSERT INTO public.item VALUES ('SYN_A','SECRET_NOTE'),('SYN_B','OTHER_NOTE');
 """
+
+
+@pytest.mark.parametrize("error_type", [AnonymizerError, Cancelled, OSError])
+def test_error_after_written_row_removes_only_owned_xml_temps(tmp_path, monkeypatch, error_type):
+    from pathlib import Path
+    from openpyxl.worksheet import _writer
+
+    target = tmp_path / "existing-map.xlsx"
+    write_mapping_xlsx(target, [("domain", "SYN_OLD", "Attribute 0001")])
+    existing = target.read_bytes()
+    foreign = tmp_path / "foreign.xml"
+    foreign.write_text("SYN_FOREIGN", encoding="utf-8")
+    _writer.ALL_TEMP_FILES.append(str(foreign))
+    created = []
+    original = _writer.create_temporary_file
+
+    def tracked(*args, **kwargs):
+        path = original(*args, **kwargs)
+        created.append(path)
+        return path
+
+    monkeypatch.setattr(_writer, "create_temporary_file", tracked)
+
+    def rows():
+        yield "domain", "SYN_PRIVATE_ORIGINAL", "Attribute 0002"
+        raise error_type("synthetic error")
+
+    try:
+        with pytest.raises(AnonymizerError):
+            write_mapping_xlsx(target, rows())
+        assert created
+        assert all(not Path(path).exists() and path not in _writer.ALL_TEMP_FILES for path in created)
+        assert target.read_bytes() == existing
+        assert foreign.read_text(encoding="utf-8") == "SYN_FOREIGN"
+        assert str(foreign) in _writer.ALL_TEMP_FILES
+    finally:
+        _writer.ALL_TEMP_FILES.remove(str(foreign))
 
 
 def test_mapping_export_contains_all_pairs_outside_package(tmp_path):
@@ -116,7 +153,7 @@ def test_cell_value_truncates_and_cleans_control_characters():
     assert "\x00" not in cell_value("bad\x00\x01value")
     long = "x" * 40_000
     result = cell_value(long)
-    assert len(result) <= 32_000 and result.endswith("…[усечено]")
+    assert len(result) <= 32_000 and result.endswith("...[truncated]")
 
 
 @pytest.mark.parametrize("value", ["=1+1", "#N/A", "+123", "@SUM(A1)", "-123", "00123"])

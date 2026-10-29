@@ -109,7 +109,7 @@ def test_legacy_project_keeps_old_labels_and_adds_column_labels_stably(tmp_path)
         "generic:public:custom.product", "SYN_OLD", label="text", avoid_original=True
     )
     project.finish(True)
-    assert legacy == "Атрибут 0001"
+    assert legacy == "Attribute 0001"
     source = tmp_path / "source"
     source.mkdir()
     (source / "custom.csv").write_text(

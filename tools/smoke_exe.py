@@ -50,6 +50,7 @@ def check(exe):
         with (root / "out/csv" / manifest["tables"][0]["file"]).open(encoding="utf-8", newline="") as stream:
             row, = list(csv.DictReader(stream))
         assert row["sys_id"] == r"\N" and row["change_author"] == "snp" and row["update_date_time"] == "SYN_RAW_TIME"
+        assert row["proddescr"] == "Interior paint - series 0001" and row["item"].isascii()
         assert "SYN_BAD_ID" not in (root / "out/dump.sql").read_text(encoding="utf-8")
         assert "SYN_BAD_AUTHOR" not in (root / "out/dump.sql").read_text(encoding="utf-8")
         assert '"sys_id"' not in (root / "out/inserts.sql").read_text(encoding="utf-8")
@@ -75,6 +76,8 @@ def check(exe):
             with (root / "review-out/csv" / entry["file"]).open(encoding="utf-8", newline="") as stream:
                 rows = list(csv.DictReader(stream))
             assert [r["qty"] for r in rows] == [{"beta": "22", "gamma": "33"}[entry["table"]]]
+            if entry["table"] == "beta":
+                assert rows[0]["note"] == "Attribute 0001"
         with zipfile.ZipFile(root / "private-map.xlsx") as book:
             worksheet = ET.fromstring(book.read("xl/worksheets/sheet1.xml"))
             assert not list(worksheet.iter("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}f"))

@@ -3,19 +3,20 @@
 The file contains ORIGINAL client values: it is written only to a user-chosen
 path outside the published package (pipeline validates the path) and must be
 handled like the .snpanon project. Streaming both ways: rows arrive from
-SQLite in batches and the workbook is written in write_only mode, so memory
+SQLite as an iterator and the workbook is written in write_only mode, so memory
 stays bounded. Excel cell and sheet limits are handled explicitly
 (UTF-16-safe truncation, control-character cleanup, sheet rollover).
 """
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from .errors import AnonymizerError
 
 HEADER = ("Домен", "Исходное значение", "Замена")
 CELL_LIMIT = 32_000
-CELL_MARKER = " …[усечено]"
+CELL_MARKER = " ...[truncated]"
 CELL_UTF16_LIMIT = 32_767
 ROWS_PER_SHEET = 1_000_000
 ILLEGAL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\uFFFE\uFFFF]")
@@ -91,6 +92,19 @@ def write_mapping_xlsx(path, rows, check=lambda: None):
                 sheet.close()
             except Exception:
                 pass
+            # close() alone leaves write_only worksheet XML on error/cancel.
+            # Clean only this export's writers; other workbooks may be active.
+            writer = getattr(sheet, "_writer", None)
+            if writer is not None:
+                try:
+                    writer.close()
+                except Exception:
+                    pass
+                try:
+                    if isinstance(writer.out, str) and Path(writer.out).is_file():
+                        writer.cleanup()
+                except (OSError, ValueError):
+                    pass  # cleanup must not replace the original failure
         try:
             workbook.close()
         except Exception:

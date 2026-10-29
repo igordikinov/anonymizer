@@ -303,10 +303,10 @@ def test_generic_json_avoids_equal_key_and_value_candidates(tmp_path):
         project = Project(tmp_path / "private.snpanon", "food")
         try:
             value, = Transformer(store.model, project, store).transform(*name, store.tables[name]["fields"],
-                                                                       ['{"A000001":"Атрибут 0001"}'])
+                                                                       ['{"A000001":"Attribute 0001"}'])
             actual = json_data.load(value)
             assert "A000001" not in actual
-            assert "Атрибут 0001" not in actual.values()
+            assert "Attribute 0001" not in actual.values()
         finally:
             project.finish(False)
 
