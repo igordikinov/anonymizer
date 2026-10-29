@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .errors import AnonymizerError, Cancelled
 from .generic_input import InputLimitError
+from .metadata import SYSTEM
 from .sql_reader import MAX_FIELD
 
 MAX_INPUT_MANIFEST = 8 * 1024**2
@@ -115,7 +116,8 @@ def _read_csv_file(store, check, entry, file, encoding, delimiter, manifest, pat
         # Resolve only nullable numeric columns once, from the effective model.
         # A table can already be dropped by ensure() for a missing business key.
         nullable_numbers = {f["name"] for f in store.tables.get(name, {}).get("fields", ())
-                            if f["type"] in {"NUMBER", "INTEGER"} and f.get("nullable", True)} if manifest is None else set()
+                            if f["name"] not in SYSTEM and f["type"] in {"NUMBER", "INTEGER"}
+                            and f.get("nullable", True)} if manifest is None else set()
         empty_as_null = {i for i, col in enumerate(full_header) if col in nullable_numbers}
         for row in reader:
             if bounded is not None:

@@ -14,6 +14,25 @@ ALIASES = {"item": ("item", "item"), "comp": ("item", "item"),
            "dmdstream": ("demand_stream", "dmdstream")}
 
 
+def system_field(field):
+    """Output audit metadata; input values never define business constraints."""
+    name = field["name"]
+    if name not in SYSTEM:
+        if field.get("fk") and field["fk"]["field"] in SYSTEM:
+            result = dict(field)
+            result["fk"] = None
+            return result
+        return field
+    result = dict(field)
+    result.update(nullable=True, keys=[], fk=None)
+    result.pop("source_pk", None)
+    if name in {"sys_id", "change_author"}:
+        result.update(type="INTEGER" if name == "sys_id" else "TEXT",
+                      sql_type="bigint" if name == "sys_id" else "text", length=None)
+        result.pop("size", None)
+    return result
+
+
 def quote(name):
     return '"' + name.replace('"', '""') + '"'
 
@@ -78,7 +97,9 @@ class Model:
         while (table, column) not in seen:
             seen.add((table, column))
             field = self.field(table, column)
-            if field and field.get("fk"):
+            if column in SYSTEM:
+                return table, column
+            if field and field.get("fk") and field["fk"]["field"] not in SYSTEM:
                 target = field["fk"]["table"], field["fk"]["field"]
                 if target == (table, column):
                     return target
@@ -99,4 +120,4 @@ class Model:
             result.update(sql_type=safe, type=kind, length=length)
         else:
             result.update(sql_type=sql_type(result), length=int(result["size"]) if result.get("type") == "TEXT" and str(result.get("size", "")).isdigit() else None)
-        return result
+        return system_field(result)

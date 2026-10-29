@@ -15,6 +15,7 @@ from xml.parsers import expat
 
 from .errors import AnonymizerError, Cancelled
 from .generic_input import InputLimitError
+from .metadata import SYSTEM
 from .sql_reader import MAX_FIELD
 from .validation import validate_value
 
@@ -596,6 +597,14 @@ def _worksheet(package, part, strings, store, name, epoch, check, styles=None):
                     for index, column in kept:
                         value, typ, coordinate = row.get(index, (None, None, None))
                         field = fields[column]
+                        if column in SYSTEM:
+                            # Audit values do not participate in type inference
+                            # or date/boolean conversion. File-level OOXML
+                            # validation and resource limits still apply.
+                            values.append(None if value == r"\N" else value)
+                            if generic:
+                                native_types.append(None)
+                            continue
                         if generic:
                             native = {"n": "NUMBER", "b": "BOOLEAN"}.get(typ, "TEXT")
                             if value == r"\N":

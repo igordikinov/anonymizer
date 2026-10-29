@@ -6,7 +6,7 @@ import sqlite3
 
 from .errors import AnonymizerError
 from .generic_input import InputInference, InputLimitError
-from .metadata import physical_type, sql_type
+from .metadata import SYSTEM, physical_type, sql_type, system_field
 
 MAX_INPUT_METADATA = 16 * 1024**2
 
@@ -43,9 +43,9 @@ class Store:
         groups = self._normalize_groups(name, fields, fk_groups) if not self.bypass_model else []
         keys = self._normalize_keys(name, fields, key_groups) if not self.bypass_model else []
         # Logical model grain: only flags that come from the YAML snapshot, before
-        # they merge with DDL PK/UK flags in enrich. sys_id is system identity:
-        # it is omitted from exports and never part of a validated key.
-        model_grain = [] if self.bypass_model else [f["name"] for f in fields if f["name"] != "sys_id"
+        # they merge with DDL PK/UK flags in enrich. Audit fields do not define
+        # business grain or participate in validated constraints.
+        model_grain = [] if self.bypass_model else [f["name"] for f in fields if f["name"] not in SYSTEM
                        and set((self.model.field(name[1], f["name"]) or {}).get("keys") or []) & {"BK", "PK", "UK"}]
         if model_grain:
             descriptor = {"columns": model_grain, "kind": "model_bk", "nulls": "distinct"}
@@ -120,7 +120,7 @@ class Store:
                 result["size"] = str(result["size"])
             safe, _, length = physical_type(sql_type(result))
             result.update(sql_type=safe, length=length)
-        return result
+        return system_field(result)
 
     def define_input(self, name, columns):
         """Define only the submitted header; never add fields from the snapshot."""
@@ -173,6 +173,18 @@ class Store:
                 table["fk_groups"], table["key_groups"] = [], []
                 for field in table["fields"]:
                     field["keys"], field["fk"] = [], None
+        # SQL ALTER can restore constraints after initial field normalization.
+        # A group with an audit component is skipped whole, never shortened.
+        for table in self.tables.values():
+            table["fields"] = [system_field(field) for field in table["fields"]]
+            table["key_groups"] = [group for group in table.get("key_groups", ())
+                                   if not SYSTEM.intersection(group["columns"])]
+            table["fk_groups"] = [group for group in table.get("fk_groups", ())
+                                  if not SYSTEM.intersection(group["columns"])
+                                  and not SYSTEM.intersection(group["target_columns"])]
+            for field in table["fields"]:
+                if field.get("fk") and field["fk"]["field"] in SYSTEM:
+                    field["fk"] = None
 
     @staticmethod
     def _normalize_keys(name, fields, key_groups):
@@ -293,7 +305,7 @@ class Store:
         values = dict(zip(columns, row, strict=True))
         body = [values.get(f["name"]) for f in table["fields"]]
         for f, value in zip(table["fields"], body):
-            if value is None and not f.get("nullable", True) and f["name"] != "sys_id":
+            if value is None and not f.get("nullable", True) and f["name"] not in SYSTEM:
                 raise AnonymizerError(f"Таблица {name[1]}, колонка {f['name']}: NULL в обязательном поле или пропущен DEFAULT.")
         encoded = json.dumps(body, ensure_ascii=False)
         self.batch.append((table["id"], encoded))
@@ -347,8 +359,10 @@ class Store:
         seen = set()
         while (schema, table, column) not in seen:
             seen.add((schema, table, column))
+            if column in SYSTEM:
+                return schema, table, column
             field = next((f for f in self.tables.get((schema, table), {}).get("fields", []) if f["name"] == column), None)
-            if field and field.get("fk"):
+            if field and field.get("fk") and field["fk"]["field"] not in SYSTEM:
                 fk = field["fk"]
                 target = fk.get("schema", schema), fk["table"], fk["field"]
                 if target == (schema, table, column):

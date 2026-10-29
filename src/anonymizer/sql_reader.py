@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .errors import AnonymizerError, Cancelled
 from .generic_input import InputLimitError, MAX_COLUMNS
+from .metadata import SYSTEM
 
 MAX_FIELD = 8 * 1024 * 1024
 SKIPPED_CREATE_KINDS = frozenset("SCHEMA SEQUENCE INDEX VIEW FUNCTION TRIGGER TYPE EXTENSION ROLE TABLESPACE DATABASE MATERIALIZED OR UNIQUE DOMAIN AGGREGATE PROCEDURE POLICY STATISTICS RULE CAST COLLATION CONVERSION FOREIGN TRANSFORM USER PUBLICATION SUBSCRIPTION TEXT ACCESS OPERATOR TEMP TEMPORARY".split())
@@ -537,13 +538,14 @@ def apply_table_constraint(fields, tokens, schema, lexer):
         target_schema, target_table, targets = reference(tokens, schema, lexer)
         if len(columns) != len(targets):
             lexer.fail("Несовпадающие колонки FOREIGN KEY")
+        audit_group = bool(SYSTEM.intersection(columns) or SYSTEM.intersection(targets))
         for col, key in zip(columns, targets):
             if col not in bycol:
                 lexer.fail("Ссылка на отсутствующую колонку")
             # A column keeps its own column-level REFERENCES; a table-level group
             # must not silently replace it (both constraints coexist in PostgreSQL).
             # enrich() pre-sets fk=None, so only a real reference blocks the write.
-            if not bycol[col].get("fk"):
+            if not audit_group and not bycol[col].get("fk"):
                 bycol[col]["fk"] = {"schema": target_schema, "table": target_table, "field": key}
         return [{"columns": columns, "target_schema": target_schema, "target_table": target_table,
                  "target_columns": targets, "match": "simple"}], []

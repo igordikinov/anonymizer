@@ -39,12 +39,20 @@ def check(exe):
         assert gui["states"]["Primary.TButton"]["disabled active pressed"] == "#f4f6fa"
         assert gui["states"]["Primary.TButton"]["pressed active"] == "#3350c4"
         source = root / "source.sql"
-        source.write_text("CREATE TABLE public.item(sys_id bigint, item text, proddescr text, volume numeric); INSERT INTO public.item VALUES (789,'PRIVATE_CODE','PRIVATE_DESCRIPTION',12345.678901);", encoding="utf-8")
+        source.write_text("CREATE TABLE public.item(sys_id bigint, item text, proddescr text, volume numeric, update_date_time timestamp, change_author uuid); INSERT INTO public.item VALUES ('SYN_BAD_ID','PRIVATE_CODE','PRIVATE_DESCRIPTION',12345.678901,'SYN_RAW_TIME','SYN_BAD_AUTHOR');", encoding="utf-8")
         subprocess.run([str(exe), "--input", str(source), "--output", str(root / "out"), "--project", str(root / "client.snpanon"), "--industry", "chem"], check=True, **kwargs)
         report = json.loads((root / "out/report.json").read_text(encoding="utf-8"))
         assert report["rows"] == 1 and report["validation"]["preserved_fields_equal"]
         assert "PRIVATE_" not in (root / "out/dump.sql").read_text(encoding="utf-8")
         assert "12345.678901" in (root / "out/dump.sql").read_text(encoding="utf-8")
+        manifest = json.loads((root / "out/csv/manifest.json").read_text(encoding="utf-8"))
+        import csv
+        with (root / "out/csv" / manifest["tables"][0]["file"]).open(encoding="utf-8", newline="") as stream:
+            row, = list(csv.DictReader(stream))
+        assert row["sys_id"] == r"\N" and row["change_author"] == "snp" and row["update_date_time"] == "SYN_RAW_TIME"
+        assert "SYN_BAD_ID" not in (root / "out/dump.sql").read_text(encoding="utf-8")
+        assert "SYN_BAD_AUTHOR" not in (root / "out/dump.sql").read_text(encoding="utf-8")
+        assert '"sys_id"' not in (root / "out/inserts.sql").read_text(encoding="utf-8")
         review_source = root / "review.sql"
         review_source.write_text("""
             CREATE TABLE public.alpha(qty numeric);
@@ -143,8 +151,8 @@ def check(exe):
         bypass_source = root / "bypass-source"
         bypass_source.mkdir()
         (bypass_source / "sku.csv").write_text(
-            "note,order_id,qty,day,uom,abc,activeflag,sys_id\n"
-            "SYN_GENERIC_PRIVATE,999,1234567890.123456789,2026-10-29,kg,A,Y,777\n", encoding="utf-8")
+            "note,order_id,qty,day,uom,abc,activeflag,sys_id,update_date_time,change_author\n"
+            "SYN_GENERIC_PRIVATE,999,1234567890.123456789,2026-10-29,kg,A,Y,SYN_BAD_ID,SYN_RAW_TIME,SYN_BAD_AUTHOR\n", encoding="utf-8")
         (bypass_source / "optimizer_production.csv").write_text(
             "product,resource,location,bomnum,qty,day\n"
             "SYN_SHARED,SYN_SHARED,SYN_SHARED,SYN_SHARED,1234567890.123456789,2026-10-29\n", encoding="utf-8")
@@ -167,8 +175,10 @@ def check(exe):
                 with (output / "csv" / entry["file"]).open(encoding="utf-8", newline="") as stream:
                     row, = list(csv.DictReader(stream))
                 assert row["day"] == "2026-10-29"
-                assert "sys_id" not in row
+                if "sys_id" in row:
+                    assert row["sys_id"] == r"\N"
                 if entry["table"] == "sku":
+                    assert row["change_author"] == "snp" and row["update_date_time"] == "SYN_RAW_TIME"
                     assert row["order_id"] == "999" and row["qty"] == "1234567890.123456789"
                     assert all(row[column] == f"{column}_000001" for column in ("note", "uom", "abc", "activeflag"))
                 elif entry["table"] == "custom":

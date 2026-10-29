@@ -172,7 +172,11 @@ class Transformer:
     def rule(self, table, field, schema=None):
         col = field["name"]
         if col == "sys_id":
-            return "omit"
+            return "clear"
+        if col == "update_date_time":
+            return "passthrough"
+        if col == "change_author":
+            return "constant"
         if self.store and self.store.bypass_model:
             if field["type"] in {"NUMBER", "INTEGER", "BOOLEAN", "DATE", "DATE_TIME", "TIME"}:
                 return "preserve"
@@ -204,9 +208,11 @@ class Transformer:
         result = []
         for field, old in zip(fields, row):
             col, rule = field["name"], self.rule(table, field, schema)
-            if rule == "omit":
-                continue
-            if old is None or old == "" or rule == "preserve":
+            if rule == "clear":
+                value = None
+            elif rule == "constant":
+                value = "snp"
+            elif old is None or old == "" or rule in {"preserve", "passthrough"}:
                 value = old
             elif self.store and self.store.bypass_model:
                 domain = f"generic:{schema}:{table}.{col}"

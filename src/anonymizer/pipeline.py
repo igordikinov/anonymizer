@@ -15,7 +15,7 @@ from .errors import AnonymizerError, Cancelled, PgCommitUncertain
 from .exporters import Exporter
 from .mapping import Project, Transformer
 from .mapping_export import write_mapping_xlsx
-from .metadata import Model
+from .metadata import Model, SYSTEM
 from .pg_loader import load as pg_load
 from .runlog import RunLog
 from .sql_reader import parse_sql
@@ -149,7 +149,7 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                         for old in store.rows(table["id"]):
                             check()
                             for f, value in zip(table["fields"], old):
-                                if f["name"] != "sys_id":
+                                if f["name"] not in SYSTEM:
                                     validate_value(name[1], f, value)
                     except Cancelled:
                         raise  # отмена — не табличная ошибка
@@ -194,7 +194,9 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                       "relationships_checked": not options.bypass_model,
                       "keys_checked": not options.bypass_model,
                       "industry": options.industry, "tables": len(store.tables), "rows": completed,
-                      "changed_cells": transformer.changed, "sys_id": "omitted; generated in dump DDL",
+                      "changed_cells": transformer.changed, "sys_id": "cleared to NULL in CSV/dump; omitted from INSERT and PostgreSQL COPY",
+                      "system_fields": {"sys_id": "clear", "update_date_time": "passthrough",
+                                        "change_author": "constant:snp", "validation": "excluded"},
                       "output_values_sha256": output_digest.hexdigest(), "validation": validations,
                       "skipped_tables": skipped_entries,
                       "skipped_sql_statements": store.skipped,

@@ -7,6 +7,7 @@ import re
 from uuid import UUID
 
 from .errors import AnonymizerError
+from .metadata import SYSTEM
 
 MAX_COLUMNS = 16384
 MAX_HEADER_BYTES = 8 * 1024**2
@@ -69,7 +70,7 @@ class InputInference:
         if len(values) != len(self.columns) or (native_types is not None and len(native_types) != len(values)):
             raise AnonymizerError("Неправильное число колонок таблицы без эталона.")
         for index, value in enumerate(values):
-            if self.columns[index] == "sys_id" or value is None:
+            if self.columns[index] in SYSTEM or value is None:
                 continue
             if not isinstance(value, str):
                 raise AnonymizerError("Внутренняя ошибка типа входной ячейки.")

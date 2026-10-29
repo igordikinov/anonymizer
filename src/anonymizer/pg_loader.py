@@ -1,9 +1,10 @@
 """Optional load of the anonymized dataset into a target PostgreSQL schema.
 
 Runs after all validations and file exports. The COPY sections of the staged
-dump.sql are the single source of truth: they already hold the transformed,
-validated rows with dump.sql escaping and no sys_id, so the database receives
-exactly what the file package contains. One transaction: verify every dataset
+dump.sql are the single source of truth: they already hold the transformed rows
+with dump.sql escaping. Cleared sys_id is omitted from target COPY so an existing
+identity/default can generate it; all other values match the file package.
+One transaction: verify every dataset
 table exists in the target schema, TRUNCATE exactly those tables (RESTART
 IDENTITY, no CASCADE), stream each dump COPY section to the server, COMMIT.
 COPY failures roll the whole dataset back, including when input-table skipping
@@ -20,6 +21,8 @@ from .metadata import quote
 
 CONNECT_TIMEOUT = 10
 COPY_HEADER = re.compile(r'COPY "([^"]+)"\."([^"]+)" ')
+MAX_COPY_ROW_BYTES = 32 * 1024**2
+MAX_COPY_CHUNK_BYTES = 8 * 1024**2
 
 
 def valid_name(name):
@@ -29,8 +32,9 @@ def valid_name(name):
 class _SectionReader(io.RawIOBase):
     """Feeds one dump COPY section to the server; EOF at the \\ terminator."""
 
-    def __init__(self, stream, check):
+    def __init__(self, stream, check, omit_index=None, expected_width=None):
         self.stream, self.check, self.done, self.count = stream, check, False, 0
+        self.omit_index, self.expected_width = omit_index, expected_width
 
     def readable(self):
         return True
@@ -39,18 +43,34 @@ class _SectionReader(io.RawIOBase):
         if self.done:
             return b""
         chunks, total = [], 0
-        while total < (size if size and size > 0 else 8 * 1024 * 1024):
+        budget = min(size, MAX_COPY_CHUNK_BYTES) if size and size > 0 else MAX_COPY_CHUNK_BYTES
+        while total < budget:
             self.check()
-            line = self.stream.readline()
+            # Generated COPY escaping can expand an 8 MiB input row. Bound the
+            # record even if a caller supplies a damaged staged dump instead.
+            line = self.stream.readline(MAX_COPY_ROW_BYTES + 1)
             if not line:
                 raise AnonymizerError("Незавершённая секция COPY в дампе.")
+            encoded = line.encode("utf-8")
+            if len(encoded) > MAX_COPY_ROW_BYTES:
+                raise AnonymizerError("Превышен лимит строки COPY в дампе.")
             if line.rstrip("\r\n") == "\\.":  # dump terminator: report EOF to psycopg2
                 self.done = True
                 break
-            chunks.append(line)
-            total += len(line)
+            if self.expected_width is not None:
+                if line.count("\t") + 1 != self.expected_width:
+                    raise AnonymizerError("Неправильное число колонок COPY в дампе.")
+                if self.omit_index is not None:
+                    values = line.rstrip("\r\n").split("\t")
+                    if values[self.omit_index] != r"\N":
+                        raise AnonymizerError("Системный sys_id не очищен в подготовленном дампе.")
+                    del values[self.omit_index]
+                    line = "\t".join(values) + "\n"
+                    encoded = line.encode("utf-8")
+            chunks.append(encoded)
+            total += len(encoded)
             self.count += 1
-        return "".join(chunks).encode("utf-8")
+        return b"".join(chunks)
 
 
 def _quiet_rollback(connection):
@@ -106,6 +126,7 @@ def load(tables, dump_path, pg, progress=lambda done: None, check=lambda: None,
             cursor.execute(f"TRUNCATE TABLE {quoted} RESTART IDENTITY")
         total = 0
         copied = set()
+        by_name = {name[1]: data for name, data in tables.items()}
         with dump_path.open(encoding="utf-8", newline="") as stream:
             header = stream.readline()
             while header:
@@ -117,7 +138,23 @@ def load(tables, dump_path, pg, progress=lambda done: None, check=lambda: None,
                                  .replace("FROM stdin", "FROM STDIN", 1)
                                  .replace(f'"{match.group(1)}".', f'{quote(pg.schema)}.', 1)
                                  .rstrip(";"))
-                    section = _SectionReader(stream, check)
+                    data = by_name[match.group(2)]
+                    fields = data.get("fields") if isinstance(data, dict) else None
+                    omit_index, expected_width = None, None
+                    if fields is not None:
+                        columns = [field["name"] for field in fields]
+                        source_columns = ", ".join(quote(column) for column in columns)
+                        expected = f'COPY {quote(match.group(1))}.{quote(match.group(2))} ({source_columns}) FROM stdin;'
+                        if header.strip() != expected:
+                            raise AnonymizerError("Колонки COPY не совпадают со структурой датасета.")
+                        expected_width = len(columns)
+                        if "sys_id" in columns:
+                            omit_index = columns.index("sys_id")
+                        target_columns = ", ".join(quote(column) for column in columns if column != "sys_id")
+                        if not target_columns:
+                            raise AnonymizerError("В таблице нет колонок для загрузки в PostgreSQL.")
+                        statement = f'COPY {quote(pg.schema)}.{quote(match.group(2))} ({target_columns}) FROM STDIN'
+                    section = _SectionReader(stream, check, omit_index, expected_width)
                     with connection.cursor() as cursor:
                         try:
                             cursor.copy_expert(statement, section, size=8 * 1024 * 1024)

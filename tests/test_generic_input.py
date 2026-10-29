@@ -144,9 +144,10 @@ def test_generic_transform_changes_all_text_but_preserves_numbers_and_dates(tmp_
         try:
             transform = Transformer(store.model, project, store)
             result = transform.transform(*name, table["fields"], values)
-            assert len(result) == len(values) - 1
+            assert len(result) == len(values)
             assert all(a != b for a, b in zip(result[:5], values[:5]))
-            assert result[5:] == values[5:7]
+            assert result[5:7] == values[5:7]
+            assert result[7] is None
             assert {domain for domain, _, _ in project.iter_mapping()} == {"generic:public:sku." + col for col in header[:5]}
         finally:
             project.finish(True)

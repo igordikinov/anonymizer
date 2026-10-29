@@ -7,13 +7,16 @@ from datetime import date, datetime, time
 from uuid import UUID
 
 from .errors import AnonymizerError
+from .metadata import SYSTEM
 from . import json_data
 from . import canonical
 
 
 def validate_value(table, field, value):
+    if field["name"] in SYSTEM:
+        return
     if value is None:
-        if not field.get("nullable", True) and field["name"] != "sys_id":
+        if not field.get("nullable", True):
             raise AnonymizerError(f"Таблица {table}, колонка {field['name']}: NULL в обязательном поле.")
         return
     if "\0" in value:
@@ -70,20 +73,18 @@ class Validator:
         for (schema, table), data in store.tables.items():
             grouped = set()
             for group in data.get("fk_groups", []):
-                if "sys_id" in group["columns"] or "sys_id" in group["target_columns"]:
-                    raise AnonymizerError("Обнаружена ссылка на sys_id. Исключить его без перенумерации ссылки нельзя.")
+                # Ignoring an audit-bearing composite reference must not turn
+                # its remaining components into separate single-column links.
+                grouped.update(group["columns"])
+                if SYSTEM.intersection(group["columns"]) or SYSTEM.intersection(group["target_columns"]):
+                    continue
                 target = store.tables.get((group["target_schema"], group["target_table"]))
                 self.links.append({"tid": data["id"], "columns": list(group["columns"]),
                                    "target": target["id"] if target else None,
                                    "target_columns": list(group["target_columns"])})
-                grouped.update(group["columns"])
             for f in data["fields"]:
                 fk = f.get("fk")
-                if fk and f["name"] != "sys_id":
-                    # A grouped column can also carry its own single-column
-                    # reference; the sys_id ban applies to every reference.
-                    if fk["field"] == "sys_id":
-                        raise AnonymizerError("Обнаружена ссылка на sys_id. Исключить его без перенумерации ссылки нельзя.")
+                if fk and f["name"] not in SYSTEM and fk["field"] not in SYSTEM:
                     if f["name"] not in grouped:
                         target = store.tables.get((fk.get("schema", schema), fk["table"]))
                         self.links.append({"tid": data["id"], "columns": [f["name"]],
@@ -96,12 +97,12 @@ class Validator:
             self.key_by_tid.setdefault(link["tid"], []).append(gid)
 
     def _key_links(self):
-        """Every PK/UNIQUE/model grain as a separate group; sys_id is identity."""
+        """Every business PK/UNIQUE/model grain as a separate group."""
         links = []
         for data in self.store.tables.values():
-            outindex = {f["name"]: i for i, f in enumerate(f for f in data["fields"] if f["name"] != "sys_id")}
+            outindex = {f["name"]: i for i, f in enumerate(data["fields"])}
             for group in data.get("key_groups", []):
-                if any(col == "sys_id" or col not in outindex for col in group["columns"]):
+                if any(col in SYSTEM or col not in outindex for col in group["columns"]):
                     continue
                 pairs = [(next(f for f in data["fields"] if f["name"] == col), outindex[col]) for col in group["columns"]]
                 links.append({"tid": data["id"], "columns": list(group["columns"]),
@@ -109,9 +110,9 @@ class Validator:
         return links
 
     def _side_maps(self):
-        """tid -> [(link index, [(field, outfields index)]...)]; sys_id never participates."""
+        """tid -> [(business link index, [(field, output index)]...)]."""
         names = {data["id"]: {f["name"] for f in data["fields"]} for data in self.store.tables.values()}
-        outindex = {data["id"]: {f["name"]: i for i, f in enumerate(f for f in data["fields"] if f["name"] != "sys_id")}
+        outindex = {data["id"]: {f["name"]: i for i, f in enumerate(data["fields"])}
                     for (schema, table), data in self.store.tables.items()}
         bytid = {data["id"]: ((schema, table), data) for (schema, table), data in self.store.tables.items()}
         as_child, as_master = {}, {}
@@ -128,10 +129,12 @@ class Validator:
 
     def row(self, name, table, old, new):
         fields = table["fields"]
-        outfields = [f for f in fields if f["name"] != "sys_id"]
-        old_kept = [v for f, v in zip(fields, old) if f["name"] != "sys_id"]
+        outfields = fields
+        old_kept = old
         source_preserved, output_preserved = [], []
         for f, before, after in zip(outfields, old_kept, new):
+            if f["name"] in SYSTEM:
+                continue
             validate_value(name[1], f, before)
             validate_value(name[1], f, after)
             if self.transform.rule(name[1], f, name[0]) == "preserve":

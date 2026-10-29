@@ -175,7 +175,7 @@ class Application:
         entry.grid(row=4, column=1, sticky="ew", padx=(self.px(ds.SPACE_L), 0), pady=self.px(ds.SPACE_XS))
         self.controls.append(entry)
         self.wrap_label(card, text="Пусто — все схемы. Несколько схем — через запятую.", style="Hint.TLabel").grid(row=5, column=1, sticky="ew", padx=(self.px(ds.SPACE_L), 0))
-        self.wrap_label(card, text="Количества, цены и даты сохраняются, включая JSON. Тексты и бизнес-коды заменяются.\nsys_id не выгружается.", style="Hint.TLabel").grid(row=6, column=0, columnspan=2, sticky="ew", pady=(self.px(ds.SPACE_L), 0))
+        self.wrap_label(card, text="Количества, цены и даты сохраняются, включая JSON. Тексты и бизнес-коды заменяются.\nsys_id очищается; change_author — snp. Системные поля не проверяются.", style="Hint.TLabel").grid(row=6, column=0, columnspan=2, sticky="ew", pady=(self.px(ds.SPACE_L), 0))
         bypass_check = self.wrap_check(card, text="Обрабатывать без эталонной модели", variable=self.bypass_model)
         bypass_check.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(self.px(ds.SPACE_S), 0))
         self.controls.append(bypass_check.control)

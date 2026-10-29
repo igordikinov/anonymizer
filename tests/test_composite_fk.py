@@ -121,8 +121,8 @@ def test_match_full_partial_is_rejected_before_output(tmp_path, match):
 
 
 @pytest.mark.parametrize("side", ["target", "source"], ids=["target-sys_id", "source-sys_id"])
-def test_composite_reference_through_sys_id_is_blocked(tmp_path, side):
-    columns, targets = (("x", "sid"), ("a", "sys_id")) if side == "target" else (("sys_id", "x"), ("sys_id", "a"))
+def test_composite_reference_through_sys_id_is_not_checked(tmp_path, side):
+    columns, targets = (("x", "y"), ("a", "sys_id")) if side == "target" else (("sys_id", "x"), ("sys_id", "a"))
     src = tmp_path / "source.sql"
     src.write_text(f"""
       CREATE TABLE public.parent(a text, sys_id bigint, b numeric);
@@ -131,9 +131,8 @@ def test_composite_reference_through_sys_id_is_blocked(tmp_path, side):
       INSERT INTO public.parent VALUES ('SYN_A', 1, 1);
       INSERT INTO public.child VALUES (1, 'SYN_A', 1);
     """, encoding="utf-8")
-    with pytest.raises(AnonymizerError):
-        run(Options(src, tmp_path / "out", tmp_path / "synthetic.snpanon"))
-    assert not (tmp_path / "out").exists()
+    report = run(Options(src, tmp_path / "out", tmp_path / "synthetic.snpanon"))
+    assert report["validation"]["foreign_keys"] == []
 
 
 def test_numeric_and_uuid_components_compare_canonically(tmp_path):
@@ -287,7 +286,7 @@ def test_dump_does_not_add_source_constraints_and_single_fk_shape_kept(tmp_path)
     assert all(entry["unit"] == "distinct values" for entry in singles)
 
 
-def test_grouped_column_keeps_its_own_sys_id_reference_blocked(tmp_path):
+def test_grouped_column_ignores_its_own_sys_id_reference_but_checks_business_group(tmp_path):
     src = tmp_path / "source.sql"
     src.write_text("""
       CREATE TABLE public.parent(sys_id bigint, a numeric, b numeric);
@@ -296,9 +295,10 @@ def test_grouped_column_keeps_its_own_sys_id_reference_blocked(tmp_path):
       INSERT INTO public.parent VALUES (1, 10, 100);
       INSERT INTO public.child VALUES (1, 10);
     """, encoding="utf-8")
-    with pytest.raises(AnonymizerError, match="sys_id"):
-        run(Options(src, tmp_path / "out", tmp_path / "synthetic.snpanon"))
-    assert not (tmp_path / "out").exists()
+    report = run(Options(src, tmp_path / "out", tmp_path / "synthetic.snpanon"))
+    entry, = report["validation"]["foreign_keys"]
+    assert entry["columns"] == ["x", "y"]
+    assert entry["missing_before"] == entry["missing_after"] == 1
 
 
 def test_repeated_identical_group_is_not_duplicated(tmp_path):
