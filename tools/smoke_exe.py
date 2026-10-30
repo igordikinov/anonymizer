@@ -231,9 +231,11 @@ def check(exe):
         connected_outputs = []
         for index in (1, 2):
             output = root / f"connected-out-{index}"
+            private_map = root / f"connected-map-{index}.xlsx"
             subprocess.run([str(exe), "--input", str(connected), "--output", str(output),
                             "--project", str(root / "connected.snpanon"), "--bypass-model",
-                            "--connectivity-profile", "builtin:optimizer-v1", "--require-integrity"], check=True, **kwargs)
+                            "--connectivity-profile", "builtin:optimizer-v1", "--require-integrity",
+                            "--mapping-xlsx", str(private_map)], check=True, **kwargs)
             report = json.loads((output / "report.json").read_text(encoding="utf-8"))
             assert report["format"] == "snp-anonymizer-report-v2" and not report["model_applied"]
             assert report["integrity_status"] == "PASSED" and report["publication_mode"] == "VERIFIED_INTEGRITY"
@@ -257,6 +259,12 @@ def check(exe):
             assert rows_by_table["storage"][0]["resource"] == routes[0]["resource"]
             assert rows_by_table["demand"][0]["quantity"] == "10.000001"
             assert rows_by_table["production"][0]["extra"] != "SYN_PRIVATE_EXTRA"
+            with zipfile.ZipFile(private_map) as book:
+                worksheet = ET.fromstring(book.read("xl/worksheets/sheet1.xml"))
+                text = "".join(worksheet.itertext())
+                assert "Ресурс (RESOURCE), схема public:" in text and "connectivity:" not in text
+                assert all(f"optimizer_{table}.resource" in text for table in ("production", "storage", "transportation"))
+                assert not list(worksheet.iter("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}f"))
             connected_outputs.append(output)
         assert (connected_outputs[0] / "dump.sql").read_bytes() == (connected_outputs[1] / "dump.sql").read_bytes()
         refusal = root / "required-without-profile"

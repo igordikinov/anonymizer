@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import tempfile
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event
@@ -18,7 +19,7 @@ from .integrity import IntegrityVerifier
 from .integrity_publication import failure_report, publish_diagnostic, profile_fields
 from .exporters import Exporter
 from .mapping import Project, Transformer
-from .mapping_export import write_mapping_xlsx
+from .mapping_export import write_mapping_xlsx, iter_mapping_rows
 from .metadata import Model, SYSTEM
 from .pg_loader import load as pg_load
 from .runlog import RunLog
@@ -305,10 +306,10 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                 progress("mapping", 0, "Запись карты замен в Excel")
 
                 def mapping_rows():
-                    for domain, old, new in project.iter_mapping():
-                        # The published schema name is the raw replacement plus
-                        # the snp_ prefix; the map shows what the output contains.
-                        yield (domain, old, "snp_" + str(new).lower()) if domain == "schema" else (domain, old, new)
+                    with closing(iter_mapping_rows(project, check)) as rows:
+                        for domain, old, new in rows:
+                            # Show the schema name actually used in the output.
+                            yield (domain, old, "snp_" + str(new).lower()) if domain == "schema" else (domain, old, new)
 
                 # Private sibling staging: never put originals into the output
                 # package and never truncate an existing map on a failed save.
@@ -317,7 +318,8 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                 except OSError as error:
                     raise AnonymizerError(f"Не удалось подготовить файл карты замен ({type(error).__name__}). "
                                           "Проверьте путь и свободное место.") from None
-                write_mapping_xlsx(mapping_temp / "mapping.xlsx", mapping_rows(), check=check)
+                with closing(mapping_rows()) as rows:
+                    write_mapping_xlsx(mapping_temp / "mapping.xlsx", rows, check=check)
                 progress("mapping", 1, "Карта замен записана")
             check()
             pg_tables = store.tables
