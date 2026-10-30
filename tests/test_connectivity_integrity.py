@@ -310,7 +310,7 @@ def test_pipeline_in_place_quantity_mutation_publishes_only_diagnostic(tmp_path,
     output = tmp_path / "out"
     with pytest.raises(IntegrityError):
         run(Options(source, output, tmp_path / "private.snpanon", bypass_model=True, delimiter=",",
-                    connectivity_profile="builtin:optimizer-v1" if with_profile else None))
+                    connectivity_profile="builtin:optimizer-v2" if with_profile else None))
     assert [path.name for path in output.iterdir()] == ["report.json"]
     report = json.loads((output / "report.json").read_text(encoding="utf-8"))
     assert report["integrity_status"] == "FAILED" and not report["dataset_published"]
@@ -484,7 +484,7 @@ def test_complete_optimizer_profile_preserves_transit_and_supplier_alias(tmp_pat
             csv.writer(stream).writerows(data)
     output = tmp_path / "out"
     report = run(Options(source, output, tmp_path / "private.snpanon", bypass_model=True,
-                         csv_schema="private_source", connectivity_profile="builtin:optimizer-v1", require_integrity=True))
+                         csv_schema="private_source", connectivity_profile="builtin:optimizer-v2", require_integrity=True))
     assert report["integrity_status"] == "PASSED" and report["source_integrity_status"] == "PASSED"
     assert not report["model_applied"] and report["relationships_checked"] and report["keys_checked"]
     assert report["publication_mode"] == "VERIFIED_INTEGRITY"

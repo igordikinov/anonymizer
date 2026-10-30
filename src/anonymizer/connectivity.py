@@ -18,6 +18,11 @@ PROFILE_FORMAT = "snp-anonymizer-connectivity-v1"
 COMPILER_VERSION = "1"
 MAX_PROFILE_BYTES = 1024 * 1024
 MAX_CONTRACT_BYTES = 16 * 1024 * 1024
+OPTIMIZER_RESOURCES = {
+    ("optimizer_production", "resource"): ("RESOURCE_PROD", "resource_prod"),
+    ("optimizer_storage", "resource"): ("RESOURCE_STOCK", "resource_stock"),
+    ("optimizer_transportation", "resource"): ("RESOURCE_TRANSP", "resource_transp"),
+}
 
 
 class ContractError(AnonymizerError):
@@ -205,12 +210,14 @@ def _normalize_profile(value):
 def load_profile(value=None):
     if value is None or value == "":
         return None
+    if str(value) == "builtin:optimizer-v1":
+        raise ContractError("Optimizer v1 больше не применяется: он объединял разные виды ресурсов. Выберите builtin:optimizer-v2 и новый проект .snpanon.")
     try:
         if isinstance(value, dict):
             raw = _json(value).encode("utf-8")
         else:
-            if str(value) == "builtin:optimizer-v1":
-                resource = files("anonymizer").joinpath("resources/connectivity/optimizer-v1.json")
+            if str(value) == "builtin:optimizer-v2":
+                resource = files("anonymizer").joinpath("resources/connectivity/optimizer-v2.json")
                 with resource.open("rb") as stream:
                     raw = stream.read(MAX_PROFILE_BYTES + 1)
             else:
@@ -380,6 +387,64 @@ def _input_declarations(store):
     return result
 
 
+def _resource_conflict():
+    raise ContractError("Ресурсы производства, хранения и перевозки должны обезличиваться отдельно.")
+
+
+def _guard_resource_profile(profile, check):
+    """Reject forbidden role equalities even when a declared table is absent.
+
+    This temporary graph is bounded by the profile budget, never by input rows.
+    It validates the profile; it does not bind missing physical input fields.
+    """
+    parents = {}
+
+    def find(node):
+        parents.setdefault(node, node)
+        while parents[node] != node:
+            parents[node] = parents[parents[node]]
+            node = parents[node]
+        return node
+
+    def unite(nodes):
+        if nodes:
+            root = find(nodes[0])
+            for node in nodes[1:]:
+                check()
+                parents[find(node)] = root
+
+    for domain in profile["domains"]:
+        check()
+        unite([(member["table"], member["column"]) for member in domain["members"]])
+    for relation in profile["relations"]:
+        check()
+        if relation["predicate"] == "equality":
+            for index in range(len(relation["source"]["members"][0]["columns"])):
+                unite([(member["table"], member["columns"][index])
+                       for side in ("source", "target") for member in relation[side]["members"]])
+    if len({find(role) for role in OPTIMIZER_RESOURCES}) != len(OPTIMIZER_RESOURCES):
+        _resource_conflict()
+
+
+def _guard_resource_components(parents, find, assignments, check):
+    owners = {}
+    for node in parents:
+        check()
+        role = node[-2:]
+        if role in OPTIMIZER_RESOURCES:
+            root = find(node)
+            if owners.setdefault(root, role) != role:
+                _resource_conflict()
+    owners = {}
+    for node, domain in assignments.items():
+        check()
+        role = node[-2:]
+        if role in OPTIMIZER_RESOURCES:
+            key = domain["mapping_domain"]
+            if owners.setdefault(key, role) != role:
+                _resource_conflict()
+
+
 def compile_contract(store, profile_spec=None, check=lambda: None):
     profile = load_profile(profile_spec)
     contract = Contract(profile=profile)
@@ -399,6 +464,9 @@ def compile_contract(store, profile_spec=None, check=lambda: None):
     declared_cost = sum(1024 + len(_json([fks, keys]).encode("utf-8")) * 8 for _, _, fks, keys in declarations)
     if base_cost + profile_cost + declared_cost > MAX_CONTRACT_BYTES:
         raise ContractError("Превышен лимит метаданных связности.", "CHECK_INCOMPLETE")
+    strict_builtin = profile is not None and profile == load_profile("builtin:optimizer-v2")
+    if profile is not None:
+        _guard_resource_profile(profile, check)
     # Explicit FK declarations form components only for domain unification;
     # they do not infer a domain from a column name or ALIASES fallback.
     parents = {}
@@ -477,6 +545,11 @@ def compile_contract(store, profile_spec=None, check=lambda: None):
                         bound.append((node, field))
                 kind, equality = _domain_type([f for _, f in bound], spec)
                 length, quantum, capacity, positive_capacity, negative_capacity = _encoding([f for _, f in bound], kind)
+                required_prefix = None
+                if strict_builtin and spec["id"] in {value[0] for value in OPTIMIZER_RESOURCES.values()}:
+                    required_prefix = spec["prefix"]
+                    if kind != "TEXT" or (length is not None and length < len(required_prefix) + 7):
+                        raise ContractError("Поле ресурса должно быть текстовым и вмещать обязательный префикс с шестизначным кодом.")
                 ident = "domain:" + spec["id"] + ":" + label
                 required = "domain:" + spec["id"] in profile["required_checks"]
                 domain = {"id": ident, "domain_id": spec["id"], "namespace": namespace,
@@ -487,6 +560,7 @@ def compile_contract(store, profile_spec=None, check=lambda: None):
                           "mapping_domain": "connectivity:" + contract.profile_hash + ":" + _hash([namespace, spec["id"]]),
                           "status": "NOT_CHECKED" if missing else "PENDING", "reason": "DOMAIN_MEMBER_MISSING" if missing else None,
                           "required": required, "apply_mapping": True,
+                          **({"required_prefix": required_prefix} if required_prefix else {}),
                           "physical_fields": [{k: f.get(k) for k in ("type", "sql_type", "length")} for _, f in bound]}
                 for node, _ in bound:
                     old = contract.assignments.get(node)
@@ -520,6 +594,8 @@ def compile_contract(store, profile_spec=None, check=lambda: None):
                 contract.keys.append(key)
                 if key["required"]:
                     contract.required_checks.append(key["id"])
+    if profile is not None or not store.bypass_model:
+        _guard_resource_components(parents, find, contract.assignments, check)
     # Physical DDL constraints and model declarations remain separate checks.
     for name, _, fks, keys in declarations:
         label = ns_labels[name[0]]

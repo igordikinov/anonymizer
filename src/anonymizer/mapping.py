@@ -155,6 +155,12 @@ class Project:
 
         try:
             _check_latin(value)
+            required_prefix = domain.get("required_prefix")
+            if required_prefix:
+                head = required_prefix + "_"
+                suffix = value[len(head):] if value.startswith(head) else ""
+                if len(suffix) < 6 or not suffix.isdecimal():
+                    raise ValueError()
             domain_value(domain, value)
             if domain["kind"] == "TEXT" and domain.get("length") and len(value) > domain["length"]:
                 raise ValueError()
@@ -195,6 +201,8 @@ class Project:
                 return value.rstrip("0").rstrip(".") if "." in value else value
         candidate = f"{domain['prefix']}_{ordinal:06d}"
         if domain.get("length") and len(candidate) > domain["length"]:
+            if domain.get("required_prefix"):
+                raise ContractError("Код ресурса с обязательным префиксом не помещается в поле.", "DOMAIN_CAPACITY_EXHAUSTED")
             candidate = base36(ordinal - 1)
         self._validate_domain_code(domain, candidate)
         return candidate

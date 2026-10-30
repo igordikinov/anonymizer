@@ -50,9 +50,16 @@ def transform_all(store, contract, path):
 
 
 def test_builtin_has_agreed_supplier_client_transport_and_period_contracts():
-    p = load_profile("builtin:optimizer-v1")
+    p = load_profile("builtin:optimizer-v2")
     domains = {d["id"]: d for d in p["domains"]}
-    assert len(domains) == 6 and len(p["keys"]) == 7
+    assert len(domains) == 8 and len(p["keys"]) == 7
+    assert "RESOURCE" not in domains
+    for identifier, table, prefix in (("RESOURCE_PROD", "optimizer_production", "resource_prod"),
+                                      ("RESOURCE_STOCK", "optimizer_storage", "resource_stock"),
+                                      ("RESOURCE_TRANSP", "optimizer_transportation", "resource_transp")):
+        assert domains[identifier]["members"] == [{"table": table, "column": "resource"}]
+        assert domains[identifier]["prefix"] == prefix
+    assert len(p["relations"]) == 15
     assert {"table": "optimizer_procurement", "column": "supplier"} in domains["LOCATION"]["members"]
     assert domains["CLIENT"]["members"] == [{"table": "optimizer_demand", "column": "client"}]
     assert domains["TRANSPORT_TYPE"]["members"] == [{"table": "optimizer_transportation", "column": "transport_type"}]

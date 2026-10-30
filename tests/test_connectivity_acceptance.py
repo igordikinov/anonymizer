@@ -110,7 +110,7 @@ def test_builtin_optimizer_preserves_network_domains_measures_and_extra_columns(
     source_hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in source.iterdir()}
     output = tmp_path / "out"
     report = run(Options(source, output, tmp_path / "private.snpanon", bypass_model=True, delimiter=",",
-                         connectivity_profile="builtin:optimizer-v1", require_integrity=True))
+                         connectivity_profile="builtin:optimizer-v2", require_integrity=True))
     assert report["integrity_status"] == "PASSED" and report["publication_mode"] == "VERIFIED_INTEGRITY"
     assert not report["model_applied"] and report["relationships_checked"] and report["keys_checked"]
     assert report["source_integrity_status"] == "WARNINGS"  # parallel route BK duplicates are preserved
@@ -129,9 +129,12 @@ def test_builtin_optimizer_preserves_network_domains_measures_and_extra_columns(
     assert routes[0] == routes[4]  # multiplicity remains, even when rows are identical
     assert procurement[0]["supplier"] == loc_b
     assert production[0]["bomnum"] == bom[0]["bomnum"]
-    assert production[0]["resource"] == routes[0]["resource"] == storage[0]["resource"]
+    assert len({production[0]["resource"], routes[0]["resource"], storage[0]["resource"]}) == 3
+    assert production[0]["resource"].startswith("resource_prod_")
+    assert storage[0]["resource"].startswith("resource_stock_")
+    assert routes[0]["resource"].startswith("resource_transp_")
     assert len({loc_a, demand[0]["product"], production[0]["resource"], bom[0]["bomnum"],
-                demand[0]["client"], routes[0]["transport_type"]}) == 6
+                demand[0]["client"], routes[0]["transport_type"], storage[0]["resource"], routes[0]["resource"]}) == 8
     assert demand[0]["quantity"] == "10.000000000000000001"
     assert production[0]["quantity"] == "1234567890.123456789" and routes[0]["duration"] == "2.5"
     assert "extra_note" in demand[0] and demand[0]["extra_note"] != "SYN_EXTRA"
@@ -151,7 +154,7 @@ def test_builtin_source_missing_period_warns_without_changing_bad_reference(tmp_
     source = csv_dataset(tmp_path / "input", optimizer_tables(missing_period=True))
     output = tmp_path / "out"
     report = run(Options(source, output, tmp_path / "private.snpanon", bypass_model=True, delimiter=",",
-                         connectivity_profile="builtin:optimizer-v1", require_integrity=True))
+                         connectivity_profile="builtin:optimizer-v2", require_integrity=True))
     relation = check(report, "period:optimizer_demand")
     assert relation["unmatched_before"] == relation["unmatched_after"] == 1
     assert relation["lost"] == relation["added"] == 0 and relation["status"] == "PASS"

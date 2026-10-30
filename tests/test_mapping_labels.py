@@ -16,7 +16,7 @@ from anonymizer.pipeline import Options, run
 from anonymizer.store import Store
 
 
-RESOURCE_KEY = ("connectivity:1d82586f2ce01a65c5f1649152fdd407f30e162dccb8ec6012bf4f32eb070867:"
+LEGACY_RESOURCE_KEY = ("connectivity:1d82586f2ce01a65c5f1649152fdd407f30e162dccb8ec6012bf4f32eb070867:"
                 "04630553c1f17f8e606bc0ce4eb827cf1759308d65a392c5502d4ed7eca8c71f")
 RESOURCE_TABLES = ("optimizer_production", "optimizer_storage", "optimizer_transportation")
 
@@ -31,7 +31,7 @@ def custom_profile(*, shared=False):
 
 
 @contextmanager
-def project_for(tmp_path, project_path, tables, profile="builtin:optimizer-v1"):
+def project_for(tmp_path, project_path, tables, profile="builtin:optimizer-v2"):
     with Store(tmp_path / f"input-{uuid4().hex}.sqlite", Model(), bypass_model=True) as store:
         for schema, table, column, values in tables:
             name = (schema, table)
@@ -54,21 +54,25 @@ def resources(schema="public", tables=RESOURCE_TABLES, values=("SYN_A", "SYN_B")
     return [(schema, table, "resource", values) for table in tables]
 
 
-def test_reported_key_resolves_to_resource_and_all_three_roles_without_changing_project(tmp_path):
+def test_split_resource_domains_are_readable_without_changing_project(tmp_path):
     with project_for(tmp_path, tmp_path / "private.snpanon", resources()) as project:
         raw = list(project.iter_mapping())
         before_settings = project.db.execute("SELECT * FROM settings ORDER BY name").fetchall()
         before_bindings = project.db.execute("SELECT * FROM connectivity_bindings ORDER BY node").fetchall()
         shown = list(iter_mapping_rows(project))
-        assert raw and {row[0] for row in raw} == {RESOURCE_KEY}
+        keys = {row[0] for row in raw}
+        assert len(keys) == 3 and LEGACY_RESOURCE_KEY not in keys
         assert {(old, new) for _, old, new in shown} == {(old, new) for _, old, new in raw}
-        assert len(shown) == len(raw) == 2
+        assert len(shown) == len(raw) == 6
         labels = {row[0] for row in shown}
-        assert len(labels) == 1
-        label, = labels
-        assert label.startswith("Ресурс (RESOURCE), схема public:")
-        assert all(f"{table}.resource" in label for table in RESOURCE_TABLES)
-        assert "connectivity:" not in label and "1d82586f" not in label
+        assert len(labels) == 3
+        for identifier, table in (("RESOURCE_PROD", "optimizer_production"),
+                                  ("RESOURCE_STOCK", "optimizer_storage"),
+                                  ("RESOURCE_TRANSP", "optimizer_transportation")):
+            label, = [label for label in labels if "(" + identifier + ")" in label]
+            assert "схема public:" in label and table + ".resource" in label
+            assert all(other + ".resource" not in label for other in RESOURCE_TABLES if other != table)
+            assert "connectivity:" not in label and "1d82586f" not in label
         assert list(project.iter_mapping()) == raw
         assert project.db.execute("SELECT * FROM settings ORDER BY name").fetchall() == before_settings
         assert project.db.execute("SELECT * FROM connectivity_bindings ORDER BY node").fetchall() == before_bindings
@@ -83,7 +87,7 @@ def test_pipeline_excel_keeps_three_columns_text_cells_and_pairs_with_readable_l
         for table in RESOURCE_TABLES), encoding="utf-8")
     path, workbook = tmp_path / "private.snpanon", tmp_path / "private-map.xlsx"
     result = run(Options(source, tmp_path / "out", path, bypass_model=True,
-                         connectivity_profile="builtin:optimizer-v1", mapping_xlsx=workbook))
+                         connectivity_profile="builtin:optimizer-v2", mapping_xlsx=workbook))
     assert result["dataset_published"]
     assert not list((tmp_path / "out").rglob("*.xlsx"))
     with sqlite3.connect(path) as db:
@@ -101,10 +105,10 @@ def test_pipeline_excel_keeps_three_columns_text_cells_and_pairs_with_readable_l
             assert all(cell.data_type == "s" for cell in row)
             assert all(cell.alignment.wrap_text for cell in row)
         shown = [tuple(c.value for c in row) for row in data[1:]]
-        assert any(label.startswith("Ресурс (RESOURCE)") and old == "=1+1" for label, old, _ in shown)
+        assert any("(RESOURCE_PROD)" in label and old == "=1+1" for label, old, _ in shown)
         assert {(old, new) for label, old, new in shown if label.startswith("Ресурс")}
         assert {(old, new) for label, old, new in shown if label.startswith("Ресурс")} == {
-            (old, new) for domain, old, new in raw if domain == RESOURCE_KEY}
+            (old, new) for domain, old, new in raw if domain.startswith("connectivity:")}
     finally:
         book.close()
 
@@ -119,7 +123,8 @@ def test_reopened_subset_keeps_historical_schemas_and_fields(tmp_path):
         assert list(project.iter_mapping()) == raw
         assert {label for label, _, _ in shown} == original_labels
         assert any("схема alpha" in label for label, _, _ in shown)
-        assert all(all(f"{table}.resource" in label for table in RESOURCE_TABLES) for label, _, _ in shown)
+        assert len({label for label, _, _ in shown}) == 6
+        assert all(sum(f"{table}.resource" in label for table in RESOURCE_TABLES) == 1 for label, _, _ in shown)
 
 
 def test_shared_namespace_lists_full_paths_and_custom_profile_does_not_borrow_builtin_meaning(tmp_path):
@@ -215,8 +220,8 @@ def test_long_history_is_bounded_explicitly_shortened_and_still_fully_consumed(t
             count += 1
 
         rows = list(iter_mapping_rows(project, check))
-        label = rows[0][0]
-        assert len(label.encode("utf-8")) <= LABEL_BYTES
+        label, = {label for label, _, _ in rows if label.endswith(LABEL_MARKER)}
+        assert all(len(label.encode("utf-8")) <= LABEL_BYTES for label, _, _ in rows)
         assert label.endswith(LABEL_MARKER)
         assert count > 4000  # truncation does not stop the cancellable stream
 

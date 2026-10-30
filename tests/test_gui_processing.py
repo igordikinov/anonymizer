@@ -51,7 +51,7 @@ def test_real_pipeline_worker_completes_new_stages_without_stopping_tk(tmp_path,
         f"CREATE TABLE public.{name} ({columns}); INSERT INTO public.{name} VALUES ({values});"
         for name, (columns, values) in tables.items()), encoding="utf-8")
     app.bypass_model.set(True)
-    app.connectivity_choice.set("Optimizer v1")
+    app.connectivity_choice.set("Optimizer v2")
     app.connectivity_selected()
     stages, threads, errors, beats = [], [], [], []
     original_run = gui.run

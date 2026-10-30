@@ -234,7 +234,7 @@ def check(exe):
             private_map = root / f"connected-map-{index}.xlsx"
             subprocess.run([str(exe), "--input", str(connected), "--output", str(output),
                             "--project", str(root / "connected.snpanon"), "--bypass-model",
-                            "--connectivity-profile", "builtin:optimizer-v1", "--require-integrity",
+                            "--connectivity-profile", "builtin:optimizer-v2", "--require-integrity",
                             "--mapping-xlsx", str(private_map)], check=True, **kwargs)
             report = json.loads((output / "report.json").read_text(encoding="utf-8"))
             assert report["format"] == "snp-anonymizer-report-v2" and not report["model_applied"]
@@ -256,17 +256,27 @@ def check(exe):
             assert rows_by_table["demand"][0]["client"] != location_a
             assert routes[0]["transport_type"] not in {location_a, rows_by_table["demand"][0]["client"]}
             assert rows_by_table["production"][0]["bomnum"] == rows_by_table["bom"][0]["bomnum"]
-            assert rows_by_table["storage"][0]["resource"] == routes[0]["resource"]
+            resource_codes = [rows_by_table["production"][0]["resource"], rows_by_table["storage"][0]["resource"], routes[0]["resource"]]
+            assert len(set(resource_codes)) == 3
+            assert all(value.startswith(prefix + "_") for value, prefix in zip(resource_codes, ("resource_prod", "resource_stock", "resource_transp")))
             assert rows_by_table["demand"][0]["quantity"] == "10.000001"
             assert rows_by_table["production"][0]["extra"] != "SYN_PRIVATE_EXTRA"
             with zipfile.ZipFile(private_map) as book:
                 worksheet = ET.fromstring(book.read("xl/worksheets/sheet1.xml"))
                 text = "".join(worksheet.itertext())
-                assert "Ресурс (RESOURCE), схема public:" in text and "connectivity:" not in text
+                assert "connectivity:" not in text
+                assert all(caption in text for caption in ("Ресурс производства (RESOURCE_PROD)", "Ресурс хранения (RESOURCE_STOCK)", "Ресурс перевозки (RESOURCE_TRANSP)"))
                 assert all(f"optimizer_{table}.resource" in text for table in ("production", "storage", "transportation"))
                 assert not list(worksheet.iter("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}f"))
             connected_outputs.append(output)
         assert (connected_outputs[0] / "dump.sql").read_bytes() == (connected_outputs[1] / "dump.sql").read_bytes()
+        retired = root / "retired-optimizer-profile"
+        retired_project = root / "retired.snpanon"
+        refused = subprocess.run([str(exe), "--input", str(connected), "--output", str(retired),
+                                  "--project", str(retired_project), "--bypass-model",
+                                  "--connectivity-profile", "builtin:optimizer-v1"], **kwargs)
+        assert refused.returncode == 1 and not retired_project.exists()
+        assert [path.name for path in retired.iterdir()] == ["report.json"]
         refusal = root / "required-without-profile"
         failed = subprocess.run([str(exe), "--input", str(connected), "--output", str(refusal),
                                  "--project", str(root / "unchecked.snpanon"), "--bypass-model", "--require-integrity"], **kwargs)
@@ -274,7 +284,7 @@ def check(exe):
         diagnostic = json.loads((refusal / "report.json").read_text(encoding="utf-8"))
         assert diagnostic["integrity_status"] == "NOT_CHECKED" and diagnostic["dataset_published"] is False
         assert diagnostic["publication_mode"] is None
-        print("EXE smoke: bundled Manrope, brand DS, SQL/CSV/XLSX, exact numbers/NULLs, legacy bypass, connectivity profile/common domains/transit/repeat, diagnostic-only refusal passed; no Python on child PATH")
+        print("EXE smoke: bundled Manrope, brand DS, SQL/CSV/XLSX, exact numbers/NULLs, legacy bypass, Optimizer v2 independent prefixed resources/transit/repeat, diagnostic-only refusals passed; no Python on child PATH")
 
 
 if __name__ == "__main__":

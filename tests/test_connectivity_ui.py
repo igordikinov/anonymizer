@@ -16,7 +16,7 @@ def report(status="PASSED", source="PASSED"):
             "validation": {"foreign_keys": []}}
 
 
-@pytest.mark.parametrize("profile,required", [(None, False), ("builtin:optimizer-v1", True), ("custom profile.json", False)])
+@pytest.mark.parametrize("profile,required", [(None, False), ("builtin:optimizer-v2", True), ("custom profile.json", False)])
 def test_cli_routes_profile_and_requirement_without_changing_legacy_defaults(tmp_path, monkeypatch, capsys, profile, required):
     received = []
     monkeypatch.setattr(cli, "run", lambda options: received.append(options) or report())
@@ -60,11 +60,11 @@ def test_gui_profile_selection_requires_integrity_but_allows_explicit_unverified
     app = app_surface(tk_root)
     assert app.connectivity_options() is None and not app.require_integrity.get()
     assert app.profile_file_entry.instate(["disabled"])
-    app.connectivity_choice.set("Optimizer v1")
+    app.connectivity_choice.set("Optimizer v2")
     app.connectivity_selected()
-    assert app.connectivity_options() == "builtin:optimizer-v1" and app.require_integrity.get()
+    assert app.connectivity_options() == "builtin:optimizer-v2" and app.require_integrity.get()
     app.require_integrity.set(False)
-    assert app.connectivity_options() == "builtin:optimizer-v1" and not app.require_integrity.get()
+    assert app.connectivity_options() == "builtin:optimizer-v2" and not app.require_integrity.get()
     app.connectivity_choice.set("Без профиля")
     app.connectivity_selected()
     assert app.connectivity_options() is None and not app.require_integrity.get()
@@ -72,13 +72,13 @@ def test_gui_profile_selection_requires_integrity_but_allows_explicit_unverified
 
 def test_gui_json_picker_cancel_preserves_previous_profile_and_requirement(tk_root, monkeypatch):
     app = app_surface(tk_root)
-    app.connectivity_choice.set("Optimizer v1")
+    app.connectivity_choice.set("Optimizer v2")
     app.connectivity_selected()
     app.require_integrity.set(False)
     monkeypatch.setattr(gui.filedialog, "askopenfilename", lambda **kwargs: "")
     app.connectivity_choice.set("JSON-файл…")
     app.connectivity_selected()
-    assert app.connectivity_choice.get() == "Optimizer v1"
+    assert app.connectivity_choice.get() == "Optimizer v2"
     assert not app.require_integrity.get()
     assert app.profile_file_entry.instate(["disabled"])
 

@@ -194,7 +194,7 @@ class Application:
         self.wrap_label(card, text="Без эталона и без профиля: тексты заменяются независимо, числа и даты сохраняются; связность не проверена. Профиль связывает только явно объявленные поля, сохраняя дополнительные колонки.", style="Hint.TLabel").grid(row=8, column=0, columnspan=2, sticky="ew", pady=(self.px(ds.SPACE_S), 0))
         ttk.Label(card, text="Профиль связности", style="Card.TLabel").grid(row=9, column=0, sticky="w", pady=self.px(ds.SPACE_XS))
         self.connectivity_selector = ttk.Combobox(card, font=self.font_field, textvariable=self.connectivity_choice,
-                                                values=["Без профиля", "Optimizer v1", "JSON-файл…"], state="readonly", width=35)
+                                                values=["Без профиля", "Optimizer v2", "JSON-файл…"], state="readonly", width=35)
         self.connectivity_selector.grid(row=9, column=1, sticky="ew", padx=(self.px(ds.SPACE_L), 0), pady=self.px(ds.SPACE_XS))
         self.connectivity_selector.bind("<<ComboboxSelected>>", self.connectivity_selected)
         self.controls.append(self.connectivity_selector)
@@ -454,8 +454,8 @@ class Application:
         choice = self.connectivity_choice.get()
         if choice == "Без профиля":
             return None
-        if choice == "Optimizer v1":
-            return "builtin:optimizer-v1"
+        if choice == "Optimizer v2":
+            return "builtin:optimizer-v2"
         if choice == "JSON-файл…" and self.connectivity_file.get().strip():
             return self.connectivity_file.get().strip()
         messagebox.showerror("Профиль связности", "Выберите JSON-файл профиля связности.", parent=self.root)

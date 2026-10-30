@@ -24,7 +24,9 @@ ROWS_PER_SHEET = 1_000_000
 ILLEGAL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\uFFFE\uFFFF]")
 LABEL_BYTES = 24 * 1024
 LABEL_MARKER = "\n… (список полей сокращён)"
-DOMAIN_TITLES = {"LOCATION": "Локация", "PRODUCT": "Продукт", "RESOURCE": "Ресурс",
+DOMAIN_TITLES = {"LOCATION": "Локация", "PRODUCT": "Продукт",
+                 "RESOURCE_PROD": "Ресурс производства", "RESOURCE_STOCK": "Ресурс хранения",
+                 "RESOURCE_TRANSP": "Ресурс перевозки",
                  "BOM": "Спецификация", "TRANSPORT_TYPE": "Тип транспорта", "CLIENT": "Клиент"}
 
 
@@ -40,7 +42,7 @@ def iter_mapping_rows(project, check=lambda: None):
     if contract is None:
         yield from project.iter_mapping()
         return
-    builtin = contract.profile_hash == _hash(load_profile("builtin:optimizer-v1"))
+    builtin = contract.profile_hash == _hash(load_profile("builtin:optimizer-v2"))
     mappings, bindings = project.iter_mapping(), None
     interrupted = None
 
