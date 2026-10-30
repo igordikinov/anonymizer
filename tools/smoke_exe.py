@@ -20,6 +20,9 @@ def check(exe):
         kwargs = {"cwd": root, "env": env, "timeout": 60, "creationflags": subprocess.CREATE_NO_WINDOW}
         subprocess.run([str(exe), "--smoke-gui", "--smoke-gui-report", str(root / "gui.json")], check=True, **kwargs)
         gui = json.loads((root / "gui.json").read_text(encoding="utf-8"))
+        progress = gui["processing_progress"]
+        assert set(progress["checked_stages"]) == {"prevalidate", "connectivity", "verify_exports"}
+        assert all(progress[key] for key in ("unknown_stage_keeps_value", "queue_drained", "poll_scheduled"))
         assert gui["fonts"]["resolved"]["bundled"], "EXE used a system fallback instead of its bundled fonts"
         faces = gui["fonts"]["selected_faces"]
         assert {role: row["weight"] for role, row in faces.items()} == {"body": 400, "semibold": 600, "bold": 700}

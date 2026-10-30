@@ -68,6 +68,71 @@ def result_for(report, identifier):
     return next(item for item in report["checks"] if item["id"] == identifier)
 
 
+def test_verifier_reports_bounded_readback_progress_without_source_values(tmp_path):
+    rows = [[str(index)] for index in range(2100)]
+    db, verifier, directory, schemas = prepare(tmp_path, [
+        ("private_table", [field("quantity", "NUMBER")], rows, rows),
+    ], Contract())
+    events = []
+    verifier.progress = lambda amount, message: events.append((amount, message))
+    try:
+        result = verifier.verify(directory, schemas)
+    finally:
+        db.close()
+    assert all(item["status"] == "PASS" for item in result["checks"])
+    assert [amount for amount, _ in events] == sorted(amount for amount, _ in events)
+    assert events[0][0] == 0 and events[-1][0] == 1
+    assert len(events) == 12  # two row counters and start/finish for each artifact
+    for label in ("CSV", "COPY", "INSERT"):
+        assert any(label in message and "1,000" in message for _, message in events)
+    assert "private_source" not in str(events) and "private_table" not in str(events)
+
+
+def test_cancel_at_last_progress_notification_does_not_complete_verification(tmp_path):
+    db, verifier, directory, schemas = prepare(tmp_path, [
+        ("data", [field("quantity", "NUMBER")], [["1"]], [["1"]]),
+    ], Contract())
+    cancelled = False
+
+    def progress(amount, message):
+        nonlocal cancelled
+        cancelled |= amount == 1
+
+    def check():
+        if cancelled:
+            raise Cancelled()
+
+    verifier.progress, verifier.check = progress, check
+    try:
+        with pytest.raises(Cancelled):
+            verifier.verify(directory, schemas)
+    finally:
+        db.close()
+
+
+def test_pipeline_forwards_actual_export_progress_and_cancellation_is_diagnostic_only(tmp_path):
+    from anonymizer.errors import IntegrityError
+    from anonymizer.pipeline import Options, run
+    from threading import Event
+
+    source = tmp_path / "source.sql"
+    source.write_text("CREATE TABLE public.data (quantity numeric);\n"
+                      "COPY public.data (quantity) FROM stdin;\n1\n\\.\n", encoding="utf-8")
+    cancel = Event()
+    events = []
+
+    def progress(stage, amount, message):
+        events.append((stage, amount, message))
+        if stage == "verify_exports" and amount == 1:
+            cancel.set()
+
+    with pytest.raises(IntegrityError) as error:
+        run(Options(source, tmp_path / "out", tmp_path / "project.snpanon", bypass_model=True), progress, cancel)
+    assert error.value.code == "CHECK_INCOMPLETE"
+    assert {p.name for p in (tmp_path / "out").iterdir()} == {"report.json"}
+    assert any(stage == "verify_exports" and "INSERT" in message for stage, _, message in events)
+
+
 def test_exact_join_pairs_detect_swap_even_when_counts_equal(tmp_path):
     rel = relation(kind="join")
     contract = Contract(relations=[rel], required_checks=[rel["id"]])

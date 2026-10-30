@@ -23,6 +23,13 @@ from .pipeline import Options, PgOptions, run
 from .runlog import RunLog
 
 
+PROGRESS_RANGES = {
+    "import": (0, 25), "prevalidate": (25, 0), "connectivity": (25, 5), "transform": (30, 35),
+    "verify_exports": (65, 30), "validate": (95, 2), "mapping": (97, 1),
+    "pg": (98, 1), "done": (100, 0),
+}
+
+
 def _invoke_focused_ttk_button(event):
     """Complete WinTk's button keyboard bindings without a default action on entries."""
     widget = event.widget
@@ -240,7 +247,7 @@ class Application:
         for control in self.controls:
             control.bind("<FocusIn>", self.reveal_control, add="+")
         root.protocol("WM_DELETE_WINDOW", self.on_close)
-        root.after(100, self.poll)
+        self._poll_after = root.after(100, self.poll)
 
     def wrap_label(self, parent, **kwargs):
         # Width is supplied by the surrounding grid/canvas, not by long text.
@@ -506,6 +513,7 @@ class Application:
                           connectivity_profile=connectivity_profile, require_integrity=self.require_integrity.get())
         self.running = True
         self.cancel.clear()
+        self.bar["value"] = 0
         self.start_button.configure(state="disabled")
         self.cancel_button.configure(state="normal")
         self.open_button.configure(state="disabled")
@@ -537,18 +545,36 @@ class Application:
         threading.Thread(target=worker, daemon=False).start()
 
     def poll(self):
+        if self._poll_after is not None:
+            try:
+                self.root.after_cancel(self._poll_after)
+            except tk.TclError:
+                pass
+            self._poll_after = None
+        if not self._window_alive():
+            return
         try:
             self._poll_once()
+        finally:
+            # A malformed/new event must not strand the worker's terminal
+            # event in the queue. Tk still reports unexpected callback errors.
+            if self._window_alive():
+                self._poll_after = self.root.after(100, self.poll)
+
+    def _window_alive(self):
+        try:
+            return bool(self.root.winfo_exists() and self.canvas.winfo_exists())
         except tk.TclError:
-            return  # окно уже уничтожено; отложенный callback догонять нечего
+            return False
 
     def _poll_once(self):
         while not self.events.empty():
             kind, data = self.events.get_nowait()
             if kind == "progress":
                 stage, amount, message = data
-                base, scale = {"import": (0, 35), "transform": (35, 55), "validate": (90, 9), "pg": (95, 4), "mapping": (99, 1), "done": (100, 0)}[stage]
-                self.bar["value"] = base + amount * scale
+                if stage in PROGRESS_RANGES:
+                    base, scale = PROGRESS_RANGES[stage]
+                    self.bar["value"] = base + min(1, max(0, amount)) * scale
                 self.status.set(message)
             else:
                 self.running = False
@@ -560,6 +586,7 @@ class Application:
                 self.pg_toggle()
                 self.connectivity_toggle()
                 if kind == "done":
+                    self.bar["value"] = 100
                     self.status.set(f"Готово: {data['tables']} таблиц, {data['rows']:,} строк")
                     missing = sum(f.get("status") == "target_not_in_input" or f.get("missing_after", 0) > 0 for f in data["validation"]["foreign_keys"])
                     loaded = f" В PostgreSQL загружено строк: {data['pg_load']['rows']:,} (схема {data['pg_load']['schema']})." if "pg_load" in data else ""
@@ -593,7 +620,6 @@ class Application:
                 if self.pending_close:
                     self.root.destroy()
                     return
-        self.root.after(100, self.poll)
 
     def open_result(self):
         if Path(self.output.get()).is_dir():
@@ -616,6 +642,27 @@ def launch(smoke=False, smoke_report=None):
         root.update_idletasks()
         root.update()
         report = app.diagnostics()
+        # Exercise the same queue consumer as processing, not only static DS.
+        # No data/pipeline run is implied by this small event-contract probe.
+        stages = ("prevalidate", "connectivity", "verify_exports")
+        for stage in stages:
+            app.events.put_nowait(("progress", (stage, .5, "Проверка обработки событий")))
+            app._poll_once()
+            base, scale = PROGRESS_RANGES[stage]
+            if float(app.bar["value"]) != base + .5 * scale:
+                raise RuntimeError("Processing progress stage failed")
+        saved = float(app.bar["value"])
+        app.events.put_nowait(("progress", ("future-stage", .5, "Дополнительная стадия")))
+        app.poll()
+        progress_evidence = {
+            "checked_stages": list(stages),
+            "unknown_stage_keeps_value": float(app.bar["value"]) == saved,
+            "queue_drained": app.events.empty(),
+            "poll_scheduled": app._poll_after is not None,
+        }
+        if not all(progress_evidence[key] for key in ("unknown_stage_keeps_value", "queue_drained", "poll_scheduled")):
+            raise RuntimeError("Processing event loop failed")
+        report["processing_progress"] = progress_evidence
         if smoke_report is not None:
             Path(smoke_report).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         root.destroy()

@@ -38,7 +38,7 @@ def _check_result(descriptor, kind):
 
 class IntegrityVerifier:
     """Private SQLite sidecar; ownership of the Store connection stays outside."""
-    def __init__(self, store, contract, check=lambda: None):
+    def __init__(self, store, contract, check=lambda: None, progress=lambda amount, message: None):
         self.store, self.contract, self.check, self.db = store, contract, check, store.db
         self.tables = store.tables
         self.ordinals = {name: 0 for name in self.tables}
@@ -58,6 +58,12 @@ class IntegrityVerifier:
         """)
         self.checks = []
         self._progress_error = None
+        self.progress = progress
+
+    def _notify(self, amount, message):
+        self.check()
+        self.progress(amount, message)
+        self.check()
 
     def expected_row(self, name, row_id, old, new):
         self.check()
@@ -98,10 +104,25 @@ class IntegrityVerifier:
             self.db.set_progress_handler(None, 0)
 
     def verify(self, directory, schema_names):
+        total = 3 + len(self.contract.domains) + len(self.contract.relations) + len(self.contract.keys)
+        completed = 0
         with self._progress():
-            self._read_artifact("csv", lambda emit: read_csv_output(directory / "csv", self.tables, schema_names, emit, self.check))
-            self._read_artifact("dump", lambda emit: read_sql_output(directory / "dump.sql", self.tables, schema_names, emit, check=self.check))
-            self._read_artifact("inserts", lambda emit: read_sql_output(directory / "inserts.sql", self.tables, schema_names, emit, inserts=True, check=self.check))
+            readers = (
+                ("csv", "CSV", lambda emit: read_csv_output(directory / "csv", self.tables, schema_names, emit, self.check)),
+                ("dump", "COPY", lambda emit: read_sql_output(directory / "dump.sql", self.tables, schema_names, emit, check=self.check)),
+                ("inserts", "INSERT", lambda emit: read_sql_output(directory / "inserts.sql", self.tables, schema_names, emit, inserts=True, check=self.check)),
+            )
+            for artifact, label, reader in readers:
+                self._notify(completed / total, f"Сверка экспорта {label}")
+                expected = max(sum(self.ordinals.values()), 1)
+
+                def row_progress(count):
+                    self._notify((completed + min(count / expected, 1)) / total,
+                                 f"Сверка {label}: прочитано строк {count:,}")
+
+                self._read_artifact(artifact, reader, row_progress)
+                completed += 1
+                self._notify(completed / total, f"Сверка экспорта {label} завершена")
             if any(item["status"] == "FAIL" for item in self.checks):
                 for kind, descriptors in (("domain", self.contract.domains), ("relation", self.contract.relations), ("key", self.contract.keys)):
                     for descriptor in descriptors:
@@ -110,21 +131,27 @@ class IntegrityVerifier:
                             result.update(status="NOT_CHECKED", reason="EXPORT_READBACK_FAILED")
                         self.checks.append(result)
                 return self._summary()
-            for domain in self.contract.domains:
-                self.checks.append(self._domain(domain))
-            for relation in self.contract.relations:
-                self.checks.append(self._relation(relation))
-            for key in self.contract.keys:
-                self.checks.append(self._key(key))
+            for label, descriptors, verify in (("доменов", self.contract.domains, self._domain),
+                                               ("связей", self.contract.relations, self._relation),
+                                               ("ключей", self.contract.keys, self._key)):
+                for index, descriptor in enumerate(descriptors, 1):
+                    self._notify(completed / total, f"Проверка {label}: {index} из {len(descriptors)}")
+                    self.checks.append(verify(descriptor))
+                    completed += 1
+                    self._notify(completed / total, f"Проверка {label}: завершено {index} из {len(descriptors)}")
             return self._summary()
 
-    def _read_artifact(self, artifact, read):
+    def _read_artifact(self, artifact, read, progress=lambda count: None):
         counters = {name: 0 for name in self.tables}
         mismatch, source_mismatch = 0, 0
+        rows_seen = 0
 
         def emit(name, row):
-            nonlocal mismatch, source_mismatch
+            nonlocal mismatch, source_mismatch, rows_seen
             self.check()
+            rows_seen += 1
+            if rows_seen % 1000 == 0:
+                progress(rows_seen)
             if name not in self.tables:
                 mismatch += 1
                 return

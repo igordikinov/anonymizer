@@ -168,7 +168,7 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
             if options.skip_error_tables:
                 # Предпроверка таблиц: типы, обязательные поля, нулевой байт, правила
                 # (JSON в ключе). Упавшая таблица исключается из выдачи с записью в журнал.
-                progress("validate", 0, "Предпроверка таблиц")
+                progress("prevalidate", 0, "Предпроверка таблиц")
                 precheck_transformer = Transformer(model, None, store)
                 for name, table in list(store.tables.items()):
                     try:
@@ -183,7 +183,7 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                         raise  # отмена — не табличная ошибка
                     except AnonymizerError as error:
                         store.drop_table(name, str(error))
-                progress("validate", 1, "Предпроверка таблиц завершена")
+                progress("prevalidate", 1, "Предпроверка таблиц завершена")
             skipped_entries = [{"table": name, "stage": "import", "reason": reason} for name, reason in store.dropped_tables]
             for name, reason in store.dropped_tables[logged_drops:]:
                 log.add("error", "validate", "table_skipped", name, reason)  # добавленные предпроверкой
@@ -208,7 +208,8 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                     skipped["reason"] = re.sub(r"(?<![A-Za-z_0-9$])" + re.escape(original) + r"\.",
                                                alias + ".", skipped["reason"])
             validator = Validator(store, transformer)
-            integrity = IntegrityVerifier(store, contract, check=check)
+            integrity = IntegrityVerifier(store, contract, check=check,
+                                          progress=lambda amount, message: progress("verify_exports", amount, message))
             exporter = Exporter(staging, store.tables, schema_names)
             completed = 0
             output_digest = hashlib.sha256()
