@@ -24,6 +24,9 @@ class Store:
         self.bypass_model = bypass_model
         self._input_inference = {}
         self._input_metadata_used, self._input_metadata_costs = 0, {}
+        # A private, bounded declaration registry survives normalisation and
+        # table skipping. It contains schema only, never input row values.
+        self.declarations, self._declaration_costs, self._declaration_bytes = {}, {}, 0
         self.dropped_columns: list[tuple[str, str]] = []
         self.dropped_tables: list[tuple[str, str]] = []  # (schema.table, причина)
         self._dropped_names: set = set()
@@ -38,6 +41,8 @@ class Store:
             raise AnonymizerError("Некорректное имя схемы, таблицы или колонки. Поддерживаются технические имена SNP.")
         if not fields or len({f['name'] for f in fields}) != len(fields):
             raise AnonymizerError("Пустой или повторяющийся список колонок в структуре.")
+        if any("collation_declared" in f and type(f["collation_declared"]) is not bool for f in fields):
+            raise AnonymizerError("Некорректная декларация сравнения поля.")
         if name in self.tables:
             raise AnonymizerError(f"Повторное CREATE TABLE: {name[1]}.")
         groups = self._normalize_groups(name, fields, fk_groups) if not self.bypass_model else []
@@ -63,7 +68,95 @@ class Store:
             raise
         self.tables[name] = {"id": tid, "fields": effective_fields, "rows": 0,
                              "fk_groups": groups, "key_groups": keys, "from_model": from_model and not self.bypass_model,
-                             "structure_source": "input" if self.bypass_model else "model" if from_model else "ddl"}
+                             "structure_source": "input" if self.bypass_model else "model" if from_model else "ddl",
+                             "physical_columns": set() if from_model else {f["name"] for f in fields},
+                             "nonnull_columns": set()}
+        self.record_declarations(name, fields, fk_groups, key_groups, from_model=from_model)
+        if not self.bypass_model:
+            snapshot_fields = [known for f in fields if (known := self.model.field(name[1], f["name"]))]
+            # Input DDL can override the effective field FK. Preserve the
+            # snapshot declaration too so the contract compiler can detect a
+            # disagreement rather than silently selecting the DDL reference.
+            self.record_declarations(name, snapshot_fields, (), (), from_model=True)
+            # Enrichment can introduce declared snapshot references on a
+            # physical DDL field; keep them alongside its own declarations.
+            self.record_declarations(name, effective_fields, (), model_grain and [{
+                "columns": model_grain, "kind": "model_bk", "nulls": "distinct"}] or (), from_model=True)
+
+    def record_declarations(self, name, fields=(), fk_groups=(), key_groups=(), *, from_model=False):
+        """Retain only bounded, scalar metadata; defaults/comments are excluded."""
+        if not isinstance(fk_groups, (list, tuple)) or not isinstance(key_groups, (list, tuple)):
+            raise AnonymizerError("Некорректный реестр деклараций таблицы.")
+        previous = self.declarations.get(name, {"fields": [], "fk_groups": [], "key_groups": []})
+        record = {key: list(previous[key]) for key in ("fields", "fk_groups", "key_groups")}
+        source = "model" if from_model else "input"
+        cost = self._declaration_costs.get(name, 512 + sum(len(part) * 4 for part in name))
+        previous_cost = self._declaration_costs.get(name, 0)
+
+        def append(key, item):
+            nonlocal cost
+            if item in record[key]:
+                return
+            cost += 128 + len(json.dumps(item, ensure_ascii=False)) * 4
+            if self._declaration_bytes - previous_cost + cost + self._input_metadata_used > MAX_INPUT_METADATA:
+                raise InputLimitError("Превышен общий лимит реестра деклараций таблиц.")
+            record[key].append(item)
+
+        for field in fields:
+            item = {key: field[key] for key in ("name", "type", "sql_type", "size", "nullable", "source_pk", "collation_declared")
+                    if key in field and isinstance(field[key], (str, int, bool, type(None)))}
+            item["origin"] = source
+            append("fields", item)
+            if from_model and field["name"] in SYSTEM and "PK" in (field.get("keys") or ()):
+                append("key_groups", {"columns": [field["name"]], "kind": "pk", "nulls": "distinct"})
+            fk = field.get("fk")
+            if isinstance(fk, dict) and isinstance(fk.get("table"), str) and isinstance(fk.get("field"), str):
+                group = {"columns": [field["name"]], "target_schema": fk.get("schema", name[0]),
+                         "target_table": fk["table"], "target_columns": [fk["field"]], "match": "simple"}
+                # A table-level composite has one declaration, not an
+                # additional fabricated single-column FK for each component.
+                covered = False
+                for declaration in [*record["fk_groups"], *fk_groups]:
+                    if not isinstance(declaration, dict) or field["name"] not in declaration.get("columns", ()):
+                        continue
+                    index = declaration["columns"].index(field["name"])
+                    targets = declaration.get("target_columns", ())
+                    if (index < len(targets) and targets[index] == fk["field"]
+                            and declaration.get("target_table") == fk["table"]
+                            and declaration.get("target_schema", name[0]) == fk.get("schema", name[0])):
+                        covered = True
+                        break
+                if not covered:
+                    append("fk_groups", group)
+        for key, groups in (("fk_groups", fk_groups), ("key_groups", key_groups)):
+            if not isinstance(groups, (list, tuple)):
+                raise AnonymizerError("Некорректный реестр деклараций таблицы.")
+            for group in groups:
+                if not isinstance(group, dict):
+                    raise AnonymizerError("Некорректный реестр деклараций таблицы.")
+                allowed = ("columns", "target_columns", "target_schema", "target_table", "match") if key == "fk_groups" else ("columns", "kind", "nulls")
+                item = {}
+                for attr in allowed:
+                    value = group.get(attr)
+                    if value is None:
+                        continue
+                    if attr in {"columns", "target_columns"}:
+                        if not isinstance(value, (list, tuple)) or any(not isinstance(col, str) for col in value):
+                            raise AnonymizerError("Некорректный реестр деклараций таблицы.")
+                        item[attr] = list(value)
+                    elif isinstance(value, str):
+                        item[attr] = value
+                    else:
+                        raise AnonymizerError("Некорректный реестр деклараций таблицы.")
+                append(key, item)
+        self._declaration_bytes += cost - previous_cost
+        self._declaration_costs[name] = cost
+        self.declarations[name] = record
+
+    def note_input_columns(self, name, columns):
+        """The header is physical input, even when a model adds absent fields."""
+        if name in self.tables:
+            self.tables[name]["physical_columns"] = set(columns)
 
     def _reserve_input_metadata(self, name, fields):
         # Include dictionary/list/string overhead conservatively. This protects
@@ -76,7 +169,7 @@ class Store:
             cost += 1024 + sum(len(str(field.get(key, ""))) * 4
                                for key in ("name", "type", "sql_type", "size"))
         previous = self._input_metadata_costs.get(name, 0)
-        if self._input_metadata_used - previous + cost > MAX_INPUT_METADATA:
+        if self._input_metadata_used - previous + cost + self._declaration_bytes > MAX_INPUT_METADATA:
             raise InputLimitError("Превышен общий лимит структуры таблиц без эталона.")
         self._input_metadata_used += cost - previous
         self._input_metadata_costs[name] = cost
@@ -91,7 +184,7 @@ class Store:
         # the catalog limit by repeatedly defining and dropping new tables.
         cost = 1024 + sum(len(part) * 12 for part in name) + len(reason) * 4
         previous = self._input_metadata_costs.get(name, 0)
-        if self._input_metadata_used - previous + cost > MAX_INPUT_METADATA:
+        if self._input_metadata_used - previous + cost + self._declaration_bytes > MAX_INPUT_METADATA:
             raise InputLimitError("Превышен общий лимит структуры таблиц без эталона.")
         self._input_metadata_used += cost - previous
         self._input_metadata_costs[name] = cost
@@ -101,7 +194,7 @@ class Store:
         # A manifest may contain arbitrary nested attributes. Retain only the
         # scalar input schema actually used here, so the catalog byte budget
         # cannot be bypassed by descriptions or another unaccounted payload.
-        result = {key: field[key] for key in ("name", "type", "sql_type", "size", "nullable") if key in field}
+        result = {key: field[key] for key in ("name", "type", "sql_type", "size", "nullable", "collation_declared") if key in field}
         result.setdefault("nullable", True)
         if type(result["nullable"]) is not bool:
             raise AnonymizerError("Некорректная обязательность поля входной таблицы.")
@@ -146,12 +239,14 @@ class Store:
         fields = state.fields()
         self._reserve_input_metadata(name, fields)
         table["fields"] = [self._input_field(field) for field in fields]
+        self.record_declarations(name, fields)
         # These columns contain only NULL, not even an explicit empty TEXT.
         # Keep their type unknown (TEXT), but allow readable empty CSV cells
         # with an explicit per-column NULL declaration in the manifest.
         table["csv_empty_null_columns"] = frozenset(column for column, kind, empty in
             zip(state.columns, state.types, state.empty)
             if column not in SYSTEM and kind is None and not empty)
+        table["inferred_null_only_columns"] = table["csv_empty_null_columns"]
         typed_blanks = {index for index, (kind, empty) in enumerate(zip(state.types, state.empty))
                         if kind is not None and kind != "TEXT" and empty}
         if typed_blanks:
@@ -285,6 +380,8 @@ class Store:
                     raise AnonymizerError(f"Таблица {name[1]}: ни одна колонка данных не совпала с моделью; данные не относятся к этой таблице.")
                 self.define(name, fields)
         available = self.columns(name)
+        if self.tables[name].get("from_model"):
+            self.tables[name]["physical_columns"].update(columns)
         if self.bypass_model and set(columns) - set(available):
             raise AnonymizerError(f"Таблица {name[1]}: колонки входа отсутствуют в его структуре.")
         kept = [col for col in columns if col in available]
@@ -311,6 +408,8 @@ class Store:
         values = dict(zip(columns, row, strict=True))
         body = [values.get(f["name"]) for f in table["fields"]]
         for f, value in zip(table["fields"], body):
+            if value is not None:
+                table["nonnull_columns"].add(f["name"])
             if value is None and not f.get("nullable", True) and f["name"] not in SYSTEM:
                 raise AnonymizerError(f"Таблица {name[1]}, колонка {f['name']}: NULL в обязательном поле или пропущен DEFAULT.")
         encoded = json.dumps(body, ensure_ascii=False)
@@ -335,14 +434,36 @@ class Store:
         игнорируются, чтобы поздний CREATE/INSERT не воскресил отброшенное.
         """
         self.flush()  # незакоммиченный батч мог уже содержать строки таблицы
-        if self.bypass_model and name not in self._dropped_names:
+        record = self.declarations.get(name)
+        dropped_record = None
+        dropped_cost = 0
+        old_cost = self._declaration_costs.get(name, 0)
+        if record and (record["fk_groups"] or record["key_groups"]):
+            # A skipped table needs its constraints for coverage, not its full
+            # field catalogue. Keep only bounded diagnostic declarations.
+            dropped_record = {"fields": [], "fk_groups": record["fk_groups"], "key_groups": record["key_groups"]}
+            dropped_cost = 512 + sum(len(part) * 4 for part in name) + sum(
+                128 + len(json.dumps(group, ensure_ascii=False)) * 4
+                for key in ("fk_groups", "key_groups") for group in dropped_record[key])
+        if name not in self._dropped_names:
             # Reserve before removing fields or retaining another diagnostic;
             # failure leaves the prior catalog accounting intact.
-            self._reserve_input_drop(name, reason)
+            self._declaration_bytes += dropped_cost - old_cost
+            try:
+                self._reserve_input_drop(name, reason)
+            except BaseException:
+                self._declaration_bytes += old_cost - dropped_cost
+                raise
+        else:
+            self._declaration_bytes += dropped_cost - old_cost
+        if dropped_record is None:
+            self.declarations.pop(name, None)
+            self._declaration_costs.pop(name, None)
+        else:
+            self.declarations[name] = dropped_record
+            self._declaration_costs[name] = dropped_cost
         data = self.tables.pop(name, None)
         self._input_inference.pop(name, None)
-        if not self.bypass_model:
-            self._release_input_metadata(name)
         if data is not None:
             self.db.execute("DELETE FROM rows WHERE tid=?", (data["id"],))
             self.count -= data["rows"]
@@ -355,6 +476,12 @@ class Store:
         cursor = self.db.execute("SELECT body FROM rows WHERE tid=? ORDER BY id", (tid,))
         for (body,) in cursor:
             yield json.loads(body)
+
+    def rows_with_ids(self, tid):
+        self.flush()
+        cursor = self.db.execute("SELECT id,body FROM rows WHERE tid=? ORDER BY id", (tid,))
+        for row_id, body in cursor:
+            yield row_id, json.loads(body)
 
     def close(self):
         self.db.close()

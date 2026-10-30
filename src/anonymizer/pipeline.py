@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import tempfile
 from dataclasses import dataclass
@@ -11,7 +12,10 @@ from threading import Event
 
 from . import __version__
 from .tabular_reader import parse_tabular
-from .errors import AnonymizerError, Cancelled, PgCommitUncertain
+from .errors import AnonymizerError, Cancelled, PgCommitUncertain, IntegrityError
+from .connectivity import ContractError, compile_contract, load_profile, MAX_PROFILE_BYTES
+from .integrity import IntegrityVerifier
+from .integrity_publication import failure_report, publish_diagnostic, profile_fields
 from .exporters import Exporter
 from .mapping import Project, Transformer
 from .mapping_export import write_mapping_xlsx
@@ -22,6 +26,7 @@ from .sql_reader import parse_sql
 from .store import Store
 from .validation import Validator, validate_value
 from .zip_input import extract_dataset
+from .generic_input import InputLimitError
 
 
 @dataclass
@@ -50,6 +55,8 @@ class Options:
     log: RunLog | None = None
     skip_error_tables: bool = False
     bypass_model: bool = False
+    connectivity_profile: str | Path | dict | None = None
+    require_integrity: bool = False
 
 
 def run(options: Options, progress=lambda stage, amount, message: None, cancel: Event | None = None):
@@ -84,8 +91,12 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
     log.add("info", "import", "start", "", f"версия {__version__}; отрасль {options.industry}; "
             f"источник {source.suffix.lower()[1:] if source.is_file() else 'csv/xlsx'}")
     if options.bypass_model:
-        log.add("info", "import", "without_model", "", "Эталон не применяется; числовые коды сохраняются, связи и ключи не проверяются.")
+        detail = ("Эталон не применяется; идентификаторы и проверки задаёт профиль связности."
+                  if options.connectivity_profile else
+                  "Эталон не применяется; числовые коды сохраняются, связность не проверена.")
+        log.add("info", "import", "without_model", "", detail)
     project, store, exporter = None, None, None
+    contract, integrity, profile, integrity_result = None, None, None, None
     success, published, retain_output = False, False, False
     mapping_temp = None
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -95,7 +106,25 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
         if cancel and cancel.is_set():
             raise Cancelled("Обработка отменена. Итоговый пакет не создан.")
 
+    def refuse_integrity(code, result=None):
+        nonlocal published
+        # A late cancellation may happen after our own directory rename but
+        # before PG COMMIT. Remove that unpublished dataset from its public
+        # location before exposing only the diagnostic report.
+        if published and not retain_output:
+            output.rename(staging)
+            published = False
+        diagnostic = failure_report(code, contract, result, bypass_model=options.bypass_model)
+        try:
+            report_path = publish_diagnostic(output, diagnostic)
+        except OSError:
+            raise AnonymizerError(f"{code}: набор данных не опубликован; не удалось записать диагностический отчёт.") from None
+        raise IntegrityError(code, report_path, diagnostic)
+
     try:
+        stage["current"] = "connectivity"
+        profile = load_profile(options.connectivity_profile)
+        stage["current"] = "import"
         with tempfile.TemporaryDirectory(prefix="snp-anonymizer-") as temp, Store(Path(temp) / "spool.sqlite", model, bypass_model=options.bypass_model) as store:
             data_source = source
             if source.suffix.lower() == ".zip":
@@ -135,17 +164,16 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                 log.add("warning", "import", "skipped_sql", skipped_kind, f"конструкций пропущено: {count}")
             if any(not [f for f in t["fields"] if f["name"] != "sys_id"] for t in store.tables.values()):
                 raise AnonymizerError("Обнаружена таблица, состоящая только из sys_id; её нельзя экспортировать без данных.")
-            project = Project(project_path, options.industry)
-            transformer = Transformer(model, project, store)
             logged_drops = len(store.dropped_tables)  # уже в журнале (import-стадия)
             if options.skip_error_tables:
                 # Предпроверка таблиц: типы, обязательные поля, нулевой байт, правила
                 # (JSON в ключе). Упавшая таблица исключается из выдачи с записью в журнал.
                 progress("validate", 0, "Предпроверка таблиц")
+                precheck_transformer = Transformer(model, None, store)
                 for name, table in list(store.tables.items()):
                     try:
                         for f in table["fields"]:
-                            transformer.rule(name[1], f, name[0])
+                            precheck_transformer.rule(name[1], f, name[0])
                         for old in store.rows(table["id"]):
                             check()
                             for f, value in zip(table["fields"], old):
@@ -161,38 +189,91 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                 log.add("error", "validate", "table_skipped", name, reason)  # добавленные предпроверкой
             if not store.tables:
                 raise AnonymizerError("Все таблицы пропущены из-за ошибок; выдавать нечего.")
+            progress("connectivity", 0, "Привязка профиля и деклараций связности")
+            contract = compile_contract(store, profile, check=check)
+            project = Project(project_path, options.industry, contract=contract if profile else None, check=check)
+            if profile is not None:
+                project.prepare_domains(store, check)
+            transformer = Transformer(model, project, store, contract=contract)
             schema_names = {s: project.pseudonym("schema", s, label=None) for s in sorted({n[0] for n in store.tables})}
             schema_names = {s: "snp_" + value.lower() for s, value in schema_names.items()}
+            public_namespaces = dict(schema_names)
+            for index, schema in enumerate(sorted({name[0] for name in store.declarations} - set(schema_names)), start=1):
+                public_namespaces[schema] = f"excluded_namespace_{index:06d}"
+            for skipped in skipped_entries:
+                if "." in skipped["table"]:
+                    schema, table_name = skipped["table"].split(".", 1)
+                    skipped["table"] = public_namespaces.get(schema, "excluded_namespace") + "." + table_name
+                for original, alias in public_namespaces.items():
+                    skipped["reason"] = re.sub(r"(?<![A-Za-z_0-9$])" + re.escape(original) + r"\.",
+                                               alias + ".", skipped["reason"])
             validator = Validator(store, transformer)
+            integrity = IntegrityVerifier(store, contract, check=check)
             exporter = Exporter(staging, store.tables, schema_names)
             completed = 0
             output_digest = hashlib.sha256()
+            progress("transform", 0, "Согласованные замены и запись трёх экспортов")
             for name, table in store.tables.items():
                 check()
                 exporter.start(name, table)
-                for old in store.rows(table["id"]):
+                for row_id, old in store.rows_with_ids(table["id"]):
                     check()
+                    # The generator must not be the source-of-truth oracle:
+                    # a mistaken in-place mutation cannot alter this snapshot.
+                    source_row = tuple(old)
+                    for field, value in zip(table["fields"], source_row):
+                        if field["name"] not in SYSTEM:
+                            validate_value(name[1], field, value)
                     row = transformer.transform(name[0], name[1], table["fields"], old)
-                    validator.row(name, table, old, row)
+                    if (not isinstance(row, (list, tuple)) or len(row) != len(table["fields"])
+                            or any(value is not None and not isinstance(value, str) for value in row)):
+                        refuse_integrity("RELATION_CHANGED", {"checks": [{"id": "transformation", "kind": "transformation",
+                            "status": "FAIL", "required": True, "reason": "ROW_SHAPE_CHANGED"}]})
+                    try:
+                        validator.row(name, table, source_row, row)
+                    except AnonymizerError:
+                        # The original row was validated before generation;
+                        # this failure is evidence against the transformation.
+                        refuse_integrity("RELATION_CHANGED", {"checks": [{"id": "transformation", "kind": "transformation",
+                            "status": "FAIL", "required": True, "reason": "PRESERVED_VALUES_CHANGED"}]})
+                    integrity.expected_row(name, row_id, source_row, row)
                     exporter.row(row)
                     output_digest.update(json.dumps(row, ensure_ascii=False).encode())
                     completed += 1
                     if completed % 1000 == 0:
                         progress("transform", completed / store.count, f"Обработано строк: {completed:,}")
                 exporter.end()
+            exporter.close(True)
+            exporter = None
+            progress("verify_exports", 0, "Повторное чтение CSV, COPY и INSERT; проверка связности")
+            integrity_result = integrity.verify(staging, schema_names)
+            for item in integrity_result.get("checks", ()):
+                status = item.get("status", "NOT_CHECKED")
+                log.add("error" if status == "FAIL" else "check" if status == "PASS" else "warning",
+                        "verify_exports", "integrity_check", item["id"],
+                        f"{status}; lost={item.get('lost', 0)}, added={item.get('added', 0)}")
+            if (integrity_result["integrity_status"] == "FAILED"
+                    or any(item.get("status") == "FAIL" for item in integrity_result.get("checks", ()))):
+                codes = {"DOMAIN_MAPPING_CONFLICT", "KEY_GROUP_CHANGED", "RELATION_CHANGED"}
+                failure_code = next((item.get("reason") for item in integrity_result.get("checks", ())
+                                     if item.get("status") == "FAIL" and item.get("reason") in codes), "RELATION_CHANGED")
+                refuse_integrity(integrity_result.get("error_code", failure_code), integrity_result)
+            if options.require_integrity and integrity_result["integrity_status"] != "PASSED":
+                unsupported = any(item.get("required") and (item.get("status") == "UNSUPPORTED"
+                                  or item.get("reason") in {"SYSTEM_FIELD_POLICY", "SYSTEM_FIELD_EXCLUDED"})
+                                  for item in integrity_result.get("checks", ()))
+                refuse_integrity("CHECK_UNSUPPORTED" if unsupported else "RELATION_TARGET_MISSING", integrity_result)
             progress("validate", 0, "Проверка связей, ключей и сохраняемых полей")
-            id_to_name = {data["id"]: f"{name[0]}.{name[1]}" for name, data in store.tables.items()}
+            id_to_name = {data["id"]: f"{schema_names[name[0]]}.{name[1]}" for name, data in store.tables.items()}
             validations = validator.finish()
             log.add_checks(validations, id_to_name)
             log.add("check", "validate", "preserved_fields", "", "сохраняемые поля и числа/даты JSON совпали")
             stage["current"] = "publish"
-            exporter.close(True)
-            exporter = None
-            report = {"format": "snp-anonymizer-report-v1", "app_version": __version__, "model": model.data["meta"],
+            report = {"format": "snp-anonymizer-report-v2", "app_version": __version__, "model": model.data["meta"],
                       "model_applied": not options.bypass_model,
                       "structure_mode": "automatic_without_model" if options.bypass_model else "standard",
-                      "relationships_checked": not options.bypass_model,
-                      "keys_checked": not options.bypass_model,
+                      "relationships_checked": integrity_result["relationships_checked"],
+                      "keys_checked": integrity_result["keys_checked"],
                       "industry": options.industry, "tables": len(store.tables), "rows": completed,
                       "changed_cells": transformer.changed, "sys_id": "cleared to NULL in CSV/dump; omitted from INSERT and PostgreSQL COPY",
                       "system_fields": {"sys_id": "clear", "update_date_time": "passthrough",
@@ -204,6 +285,20 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
                       "privacy": "nontechnical text and JSON strings/keys pseudonymized; JSON numbers/dates preserved; project mappings excluded",
                       "fields": [{"schema": schema_names[name[0]], "table": name[1], "columns": [
                           {"name": f["name"], "rule": transformer.rule(name[1], f, name[0]), "type": f["sql_type"]} for f in table["fields"]]} for name, table in store.tables.items()]}
+            report.update(integrity_result)
+            report.update(profile_fields(contract))
+            report["dataset_published"] = True
+            if profile is not None:
+                profile_file = staging / "connectivity-profile.json"
+                encoded_profile = json.dumps(contract.public_profile(), ensure_ascii=False, sort_keys=True,
+                                             separators=(",", ":")).encode("utf-8")
+                if len(encoded_profile) > MAX_PROFILE_BYTES:
+                    raise ContractError("Превышен лимит публикуемого профиля.")
+                profile_file.write_bytes(encoded_profile)
+                with profile_file.open("rb") as stream:
+                    published_profile = stream.read(MAX_PROFILE_BYTES + 1)
+                if hashlib.sha256(published_profile).hexdigest() != contract.profile_hash:
+                    raise ContractError("Профиль в результате отличается от проверенного контракта.")
             check()
             if options.mapping_xlsx:
                 progress("mapping", 0, "Запись карты замен в Excel")
@@ -283,19 +378,37 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
         retain_output = True
         log.add("warning", "pg", "commit_not_confirmed", "", str(error))
         raise
+    except IntegrityError as error:
+        log.add("error", "verify_exports", "integrity_refused", "", str(error))
+        raise
+    except ContractError as error:
+        log.add("error", "connectivity", "contract_refused", "", error.code)
+        refuse_integrity(error.code)
+    except InputLimitError:
+        if options.connectivity_profile or options.require_integrity or stage["current"] == "verify_exports":
+            refuse_integrity("CHECK_INCOMPLETE", integrity_result)
+        raise
     except Cancelled:
         log.add("warning", stage["current"], "cancelled", "", "Обработка отменена. Итоговый пакет не создан.")
+        if options.connectivity_profile or options.require_integrity or stage["current"] == "verify_exports":
+            refuse_integrity("CHECK_INCOMPLETE", integrity_result)
         raise
     except UnicodeError:
         log.add("error", stage["current"], "error", "", "Ошибка кодировки. Выберите UTF-8 или Windows-1251.")
         raise AnonymizerError("Ошибка кодировки. Выберите UTF-8 или Windows-1251.") from None
     except AnonymizerError as error:
         log.add("error", stage["current"], "error", "", str(error))
+        if options.connectivity_profile and stage["current"] == "connectivity":
+            refuse_integrity("CONTRACT_CONFLICT", integrity_result)
+        if stage["current"] == "verify_exports" or (options.connectivity_profile and stage["current"] in {"transform", "validate", "mapping", "publish"}):
+            refuse_integrity("CHECK_INCOMPLETE", integrity_result)
         raise
     except (OSError, ValueError, json.JSONDecodeError) as error:
         # Do not echo raw exception messages: they may contain input content/paths.
         log.add("error", stage["current"], "error", "", f"Не удалось обработать файлы ({type(error).__name__}). "
                 "Проверьте формат, свободное место и доступ к папкам.")
+        if stage["current"] == "verify_exports" or (options.connectivity_profile and stage["current"] in {"connectivity", "transform", "validate", "mapping", "publish"}):
+            refuse_integrity("CHECK_INCOMPLETE", integrity_result)
         raise AnonymizerError(f"Не удалось обработать файлы ({type(error).__name__}). Проверьте формат, свободное место и доступ к папкам.") from None
     except Exception as error:
         # Внутренняя ошибка: в журнал идёт только тип исключения, значение не пишется.

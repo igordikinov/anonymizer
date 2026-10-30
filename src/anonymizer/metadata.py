@@ -75,7 +75,8 @@ def physical_type(text):
     else:
         kind = "UUID"
     m = re.search(r"\((\d+)\)", s)
-    return s, kind, int(m[1]) if kind == "TEXT" and m else None
+    length = int(m[1]) if kind == "TEXT" and m else 1 if s in {"char", "character"} else None
+    return s, kind, length
 
 
 class Model:

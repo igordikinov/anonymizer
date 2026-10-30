@@ -56,7 +56,8 @@ def test_sql_broken_insert_skipped_good_processed(tmp_path):
     names = {entry["table"] for entry in report["skipped_tables"]}
     # Гранулярность — таблица: битый INSERT роняет child целиком (частичные строки
     # вычищаются), other упала до CREATE; годная parent опубликована.
-    assert {"public.child", "public.other"} <= names
+    public_schema = report["fields"][0]["schema"]
+    assert {f"{public_schema}.child", f"{public_schema}.other"} <= names
     manifest = read_manifest(tmp_path / "out")
     table_names = {table["table"] for table in manifest["tables"]}
     assert table_names == {"parent"}
@@ -77,7 +78,7 @@ def test_dropping_nonlast_table_does_not_mix_later_table_rows(tmp_path):
     """, encoding="utf-8")
     output = tmp_path / "out"
     report = run(Options(src, output, tmp_path / "synthetic.snpanon", skip_error_tables=True))
-    assert {entry["table"] for entry in report["skipped_tables"]} == {"public.alpha"}
+    assert {entry["table"] for entry in report["skipped_tables"]} == {report["fields"][0]["schema"] + ".alpha"}
     tables = {}
     for entry in read_manifest(output)["tables"]:
         with (output / "csv" / entry["file"]).open(encoding="utf-8", newline="") as stream:
@@ -109,7 +110,7 @@ def test_broken_create_is_skipped_and_not_resurrected(tmp_path):
     """, encoding="utf-8")
     report = run(Options(src, tmp_path / "out", tmp_path / "synthetic.snpanon", skip_error_tables=True))
     skipped = {entry["table"] for entry in report["skipped_tables"]}
-    assert skipped == {"public.bad1"}  # одна запись, имя — не кортеж
+    assert skipped == {report["fields"][0]["schema"] + ".bad1"}  # одна запись, имя — не кортеж
     manifest = read_manifest(tmp_path / "out")
     assert {t["table"] for t in manifest["tables"]} == {"parent"}  # поздний CREATE не воскресил
 

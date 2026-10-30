@@ -296,7 +296,8 @@ def parse_sql(path: Path, store, check=lambda: None, encoding="utf-8-sig", progr
                                 if token.kind == "id" and token.value.upper() in {"DEFAULT", "NOT", "NULL", "COLLATE", "CONSTRAINT", "PRIMARY", "UNIQUE", "CHECK", "REFERENCES", "GENERATED"}:
                                     break
                                 type_tokens.append(token.value)
-                            field = {"name": column, "sql_type": " ".join(type_tokens), "nullable": not any(group[i].is_("NOT") and group[i+1].is_("NULL") for i in range(len(group)-1))}
+                            field = {"name": column, "sql_type": " ".join(type_tokens), "nullable": not any(group[i].is_("NOT") and group[i+1].is_("NULL") for i in range(len(group)-1)),
+                                     "collation_declared": any(token.is_("COLLATE") for token in group[1:])}
                             key = apply_column_constraints(field, group, name[0], lex)
                             fields.append(field)
                             if key:
@@ -565,6 +566,8 @@ def alter_constraint(store, tokens, default_schema, lexer):
     if pos < len(tokens) and tokens[pos].is_("ADD"):
         table_entry = store.tables[(schema, table)]
         fks, keys = apply_table_constraint(table_entry["fields"], tokens[pos+1:], schema, lexer)
+        if hasattr(store, "record_declarations"):
+            store.record_declarations((schema, table), table_entry["fields"], fks, keys)
         if getattr(store, "bypass_model", False):
             return
         for group in fks:

@@ -107,6 +107,10 @@ class Application:
         self.mapping_xlsx = tk.StringVar()
         self.skip_error_tables = tk.BooleanVar(value=False)
         self.bypass_model = tk.BooleanVar(value=False)
+        self.connectivity_choice = tk.StringVar(value="Без профиля")
+        self.connectivity_file = tk.StringVar()
+        self.require_integrity = tk.BooleanVar(value=False)
+        self._profile_previous_choice = "Без профиля"
         self.runlog = RunLog()
         self.status = tk.StringVar(value="Выберите SQL/XLSX, ZIP или папку CSV/XLSX")
         self.result = tk.StringVar(value="Будут созданы dump.sql, inserts.sql, csv/ и report.json")
@@ -180,7 +184,26 @@ class Application:
         bypass_check = self.wrap_check(card, text="Обрабатывать без эталонной модели", variable=self.bypass_model)
         bypass_check.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(self.px(ds.SPACE_S), 0))
         self.controls.append(bypass_check.control)
-        self.wrap_label(card, text="Без эталона: все тексты заменяются, числа (включая числовые коды) и даты сохраняются. Связи и ключи не проверяются.", style="Hint.TLabel").grid(row=8, column=0, columnspan=2, sticky="ew", pady=(self.px(ds.SPACE_S), 0))
+        self.wrap_label(card, text="Без эталона и без профиля: тексты заменяются независимо, числа и даты сохраняются; связность не проверена. Профиль связывает только явно объявленные поля, сохраняя дополнительные колонки.", style="Hint.TLabel").grid(row=8, column=0, columnspan=2, sticky="ew", pady=(self.px(ds.SPACE_S), 0))
+        ttk.Label(card, text="Профиль связности", style="Card.TLabel").grid(row=9, column=0, sticky="w", pady=self.px(ds.SPACE_XS))
+        self.connectivity_selector = ttk.Combobox(card, font=self.font_field, textvariable=self.connectivity_choice,
+                                                values=["Без профиля", "Optimizer v1", "JSON-файл…"], state="readonly", width=35)
+        self.connectivity_selector.grid(row=9, column=1, sticky="ew", padx=(self.px(ds.SPACE_L), 0), pady=self.px(ds.SPACE_XS))
+        self.connectivity_selector.bind("<<ComboboxSelected>>", self.connectivity_selected)
+        self.controls.append(self.connectivity_selector)
+        self.profile_file_frame = ttk.Frame(card, style="Card.TFrame")
+        self.profile_file_frame.columnconfigure(0, weight=1)
+        self.profile_file_entry = ttk.Entry(self.profile_file_frame, font=self.font_field, textvariable=self.connectivity_file)
+        self.profile_file_entry.grid(row=0, column=0, sticky="ew")
+        self.profile_file_button = ttk.Button(self.profile_file_frame, text="Файл…", command=self.pick_connectivity_profile)
+        self.profile_file_button.grid(row=0, column=1, padx=(self.px(ds.SPACE_S), 0))
+        self.controls.extend([self.profile_file_entry, self.profile_file_button])
+        require_check = self.wrap_check(card, text="Требовать проверенную связность", variable=self.require_integrity)
+        require_check.grid(row=11, column=0, columnspan=2, sticky="ew", pady=(self.px(ds.SPACE_S), 0))
+        self.require_integrity_check = require_check.control
+        self.controls.append(require_check.control)
+        self.wrap_label(card, text="Выбор профиля включает требование полного PASS. Его можно снять для неполного охвата; обнаруженная ошибка преобразования всегда блокирует выдачу.", style="Hint.TLabel").grid(row=12, column=0, columnspan=2, sticky="ew", pady=(self.px(ds.SPACE_S), 0))
+        self.connectivity_toggle()
 
         card = self.card(cards_holder, "3. Загрузка в PostgreSQL (необязательно)")
         check = self.wrap_check(card, text="После проверок загрузить датасет в базу (TRUNCATE таблиц датасета + COPY)", variable=self.pg_enabled, command=self.pg_toggle)
@@ -212,6 +235,10 @@ class Application:
                 bind_wheel(child)
 
         bind_wheel(cards_holder)
+        # Tab navigation must reveal controls in the scrollable form, including
+        # the profile fields when PostgreSQL makes the form taller.
+        for control in self.controls:
+            control.bind("<FocusIn>", self.reveal_control, add="+")
         root.protocol("WM_DELETE_WINDOW", self.on_close)
         root.after(100, self.poll)
 
@@ -369,6 +396,64 @@ class Application:
         if path:
             self.mapping_xlsx.set(path)
 
+    def connectivity_toggle(self):
+        if self.connectivity_choice.get() == "JSON-файл…":
+            self.profile_file_frame.grid(row=10, column=1, sticky="ew", padx=(self.px(ds.SPACE_L), 0), pady=self.px(ds.SPACE_XS))
+        else:
+            self.profile_file_frame.grid_remove()
+        state = "normal" if not self.running and self.connectivity_choice.get() == "JSON-файл…" else "disabled"
+        self.profile_file_entry.configure(state=state)
+        self.profile_file_button.configure(state=state)
+
+    def reveal_control(self, event):
+        widget = event.widget
+        bounds = self.canvas.bbox("all")
+        if not bounds or not widget.winfo_ismapped():
+            return
+        top = self.canvas.winfo_rooty()
+        bottom = top + self.canvas.winfo_height()
+        widget_top = widget.winfo_rooty()
+        widget_bottom = widget_top + widget.winfo_height()
+        margin = self.px(ds.SPACE_S)
+        delta = (widget_top - top - margin if widget_top < top + margin else
+                 widget_bottom - bottom + margin if widget_bottom > bottom - margin else 0)
+        if delta:
+            height = max(1, bounds[3] - bounds[1])
+            self.canvas.yview_moveto((self.canvas.canvasy(0) + delta) / height)
+
+    def connectivity_selected(self, event=None):
+        choice = self.connectivity_choice.get()
+        if choice == "JSON-файл…":
+            path = filedialog.askopenfilename(parent=self.root, title="Профиль связности", filetypes=[("JSON-профиль", "*.json")])
+            if not path:
+                self.connectivity_choice.set(self._profile_previous_choice)
+                self.connectivity_toggle()
+                return
+            self.connectivity_file.set(path)
+        self._profile_previous_choice = choice
+        self.require_integrity.set(choice != "Без профиля")
+        self.connectivity_toggle()
+
+    def pick_connectivity_profile(self):
+        path = filedialog.askopenfilename(parent=self.root, title="Профиль связности", filetypes=[("JSON-профиль", "*.json")])
+        if path:
+            self.connectivity_file.set(path)
+            self.connectivity_choice.set("JSON-файл…")
+            self._profile_previous_choice = "JSON-файл…"
+            self.require_integrity.set(True)
+            self.connectivity_toggle()
+
+    def connectivity_options(self):
+        choice = self.connectivity_choice.get()
+        if choice == "Без профиля":
+            return None
+        if choice == "Optimizer v1":
+            return "builtin:optimizer-v1"
+        if choice == "JSON-файл…" and self.connectivity_file.get().strip():
+            return self.connectivity_file.get().strip()
+        messagebox.showerror("Профиль связности", "Выберите JSON-файл профиля связности.", parent=self.root)
+        raise ValueError("connectivity_profile")
+
     def export_log(self):
         path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV", "*.csv")])
         if not path:
@@ -408,6 +493,7 @@ class Application:
         industry = next(k for k, v in INDUSTRIES.items() if v["title"] == self.industry.get())
         try:
             pg = self.pg_options()
+            connectivity_profile = self.connectivity_options()
         except ValueError:
             return
         self.runlog = RunLog()
@@ -416,7 +502,8 @@ class Application:
                           {"Авто": None, "Табуляция": "\t"}.get(self.delimiter.get(), self.delimiter.get()),
                           tuple(s.strip() for s in self.schemas.get().split(",") if s.strip()), "public", pg,
                           Path(self.mapping_xlsx.get()) if self.mapping_xlsx.get().strip() else None, True,
-                          self.runlog, self.skip_error_tables.get(), self.bypass_model.get())
+                          self.runlog, self.skip_error_tables.get(), self.bypass_model.get(),
+                          connectivity_profile=connectivity_profile, require_integrity=self.require_integrity.get())
         self.running = True
         self.cancel.clear()
         self.start_button.configure(state="disabled")
@@ -440,7 +527,11 @@ class Application:
             except PgCommitUncertain as error:
                 self.events.put(("uncertain", str(error)))
             except AnonymizerError as error:
-                self.events.put(("error", str(error)))
+                report_path = getattr(error, "report_path", None)
+                if report_path is not None:
+                    self.events.put(("diagnostic", (str(error), str(report_path))))
+                else:
+                    self.events.put(("error", str(error)))
             except Exception:
                 self.events.put(("error", "Внутренняя ошибка обработки. Клиентские значения не записаны в журнал."))
         threading.Thread(target=worker, daemon=False).start()
@@ -467,11 +558,20 @@ class Application:
                 for control in self.controls:
                     control.configure(state="readonly" if isinstance(control, ttk.Combobox) else "normal")
                 self.pg_toggle()
+                self.connectivity_toggle()
                 if kind == "done":
                     self.status.set(f"Готово: {data['tables']} таблиц, {data['rows']:,} строк")
                     missing = sum(f.get("status") == "target_not_in_input" or f.get("missing_after", 0) > 0 for f in data["validation"]["foreign_keys"])
                     loaded = f" В PostgreSQL загружено строк: {data['pg_load']['rows']:,} (схема {data['pg_load']['schema']})." if "pg_load" in data else ""
-                    self.result.set(f"Проверены доступные связи, бизнес-ключи и сохраняемые поля. Предупреждений по ссылкам: {missing}.{loaded} Отчёт — report.json.")
+                    integrity = data.get("integrity_status")
+                    if integrity == "PASSED":
+                        scope = "Обязательные проверки связности пройдены."
+                    elif integrity == "NOT_CHECKED":
+                        scope = "Связность не подтверждена: проверьте охват и ограничения в отчёте."
+                    else:
+                        scope = "Проверки завершены; точный охват указан в отчёте."
+                    source_warning = " Есть исходные дефекты данных." if data.get("source_integrity_status") == "WARNINGS" else ""
+                    self.result.set(f"{scope}{source_warning} Предупреждений по ссылкам: {missing}.{loaded} Отчёт — report.json.")
                     self.open_button.configure(state="normal")
                 elif kind == "uncertain":
                     self.status.set("Результат COMMIT PostgreSQL не подтверждён")
@@ -479,6 +579,12 @@ class Application:
                     self.open_button.configure(state="normal")
                     if not self.pending_close:
                         messagebox.showwarning("PostgreSQL", data)
+                elif kind == "diagnostic":
+                    self.status.set("Создан диагностический отчёт; набор данных не опубликован")
+                    self.result.set(data[0] + " Диагностика — report.json в папке результата.")
+                    self.open_button.configure(state="normal")
+                    if not self.pending_close:
+                        messagebox.showerror("Проверка связности", data[0])
                 else:
                     self.status.set("Итоговый пакет не создан")
                     self.result.set(data + " Журнал прогона доступен кнопкой «Выгрузить журнал (CSV)».")

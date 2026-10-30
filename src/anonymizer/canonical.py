@@ -1,5 +1,6 @@
 """Canonical identity comparisons; original measures remain untouched."""
 from decimal import Decimal
+from datetime import date
 from uuid import UUID
 
 
@@ -27,6 +28,8 @@ def value(field, text):
         return str(UUID(text))
     if field["type"] == "BOOLEAN":
         return "true" if text.lower() in {"true", "t", "1", "yes", "on"} else "false"
-    if field["sql_type"].startswith(("character(", "char(")):
+    if field["type"] == "DATE" and text not in {"infinity", "-infinity"}:
+        return date.fromisoformat(text).isoformat()
+    if field["sql_type"] in {"char", "character"} or field["sql_type"].startswith(("character(", "char(")):
         return text.rstrip(" ")
     return text

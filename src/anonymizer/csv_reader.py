@@ -121,6 +121,7 @@ def _read_csv_file(store, check, entry, file, encoding, delimiter, manifest, pat
                 or len(set(marked_empty_null)) != len(marked_empty_null)):
             raise AnonymizerError(f"CSV {entry['table']}: некорректный список empty_null_columns в manifest.json.")
         header = store.ensure(name, header)
+        store.note_input_columns(name, full_header)
         table = store.tables.get(name)
         if manifest and table is not None:
             table["csv_empty_null_columns"] = frozenset(marked_empty_null).intersection(header) - {"update_date_time"}

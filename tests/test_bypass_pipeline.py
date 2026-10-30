@@ -114,7 +114,7 @@ def test_skip_bad_inference_keeps_other_tables(tmp_path):
     report = run(Options(folder, output, tmp_path / "private.snpanon", bypass_model=True,
                          skip_error_tables=True, log=log))
     assert set(output_rows(output)) == {"good"}
-    assert [t["table"] for t in report["skipped_tables"]] == ["public.bad"]
+    assert [t["table"] for t in report["skipped_tables"]] == [report["fields"][0]["schema"] + ".bad"]
     assert "SYN_PRIVATE_BAD" not in json.dumps(report)
     assert "SYN_PRIVATE_BAD" not in str(log.entries)
 

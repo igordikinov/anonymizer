@@ -351,14 +351,16 @@ def test_generic_csv_cancellation_checked_for_each_physical_line(tmp_path):
 def test_generic_catalog_budget_is_global_and_drop_releases_it(tmp_path, monkeypatch):
     import anonymizer.store as module
     from anonymizer.generic_input import InputLimitError
-    monkeypatch.setattr(module, "MAX_INPUT_METADATA", 3000)
+    # The shared budget now includes the declaration registry: one live
+    # catalogue plus a tombstone fits, while two live catalogues do not.
+    monkeypatch.setattr(module, "MAX_INPUT_METADATA", 4000)
     with Store(tmp_path / "read.sqlite", Model(), bypass_model=True) as store:
         store.define_input(("public", "first"), ["note"])
         store.observe_input(("public", "first"), ["PRIVATE"])
         store.add_row(("public", "first"), ["note"], ["PRIVATE"])
         store.finish_input(("public", "first"))
         retained = store._input_metadata_used
-        assert 0 < retained < 3000
+        assert 0 < retained < 4000
         with pytest.raises(InputLimitError, match="общий лимит"):
             store.define_input(("public", "second"), ["note"])
         assert store._input_metadata_used == retained

@@ -583,6 +583,7 @@ def _worksheet(package, part, strings, store, name, epoch, check, styles=None):
                 else:
                     store.define(name, store.model.fields(name[1]), from_model=True)
                 selected = set(store.ensure(name, header))
+                store.note_input_columns(name, header)
                 kept = [(i + 1, col) for i, col in enumerate(header) if col in selected]
                 fields = {f["name"]: f for f in store.tables.get(name, {}).get("fields", ())}
             else:

@@ -1,5 +1,6 @@
 """Run the portable EXE from an empty directory without Python on its PATH."""
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -70,7 +71,7 @@ def check(exe):
                         "--mapping-xlsx", str(root / "private-map.xlsx")], check=True, **kwargs)
         review = json.loads((root / "review-out/report.json").read_text(encoding="utf-8"))
         assert review["rows"] == 2 and review["tables"] == 2
-        assert [t["table"] for t in review["skipped_tables"]] == ["public.alpha"]
+        assert [t["table"] for t in review["skipped_tables"]] == [review["fields"][0]["schema"] + ".alpha"]
         manifest = json.loads((root / "review-out/csv/manifest.json").read_text(encoding="utf-8"))
         import csv
         for entry in manifest["tables"]:
@@ -151,7 +152,7 @@ def check(exe):
                         "--project", str(root / "xlsx-skip.snpanon"), "--skip-error-tables"], check=True, **kwargs)
         skipped = json.loads((root / "xlsx-skip-out/report.json").read_text(encoding="utf-8"))
         assert skipped["rows"] == 2 and skipped["tables"] == 2
-        assert [table["table"] for table in skipped["skipped_tables"]] == ["public.item"]
+        assert [table["table"] for table in skipped["skipped_tables"]] == [skipped["fields"][0]["schema"] + ".item"]
         bypass_source = root / "bypass-source"
         bypass_source.mkdir()
         (bypass_source / "sku.csv").write_text(
@@ -201,7 +202,68 @@ def check(exe):
             row, = list(csv.DictReader(stream))
         assert row["cost"] == "" and row["qty"] == "1234567890.123456789"
         assert "cost" in optimizer["empty_null_columns"]
-        print("EXE smoke: bundled Manrope, brand DS, SQL/CSV/XLSX file/folder/ZIP, exact numbers, numeric NULL blanks and manifest roundtrip, formula/skip and full model bypass passed; no Python on child PATH")
+        connected = root / "connected-source"
+        connected.mkdir()
+        fixture = {
+            "periods": [["datasetid", "period"], [1, 0]],
+            "demand": [["datasetid", "period", "location", "product", "client", "quantity"],
+                       [1, 0, "SYN_B", "SYN_P", "SYN_A", "10.000001"]],
+            "procurement": [["datasetid", "period", "location", "product", "supplier"],
+                            [1, 0, "SYN_B", "SYN_P", "SYN_A"]],
+            "production": [["datasetid", "period", "location", "product", "bomnum", "resource", "extra"],
+                           [1, 0, "SYN_A", "SYN_P", "SYN_BOM", "SYN_R", "SYN_PRIVATE_EXTRA"]],
+            "storage": [["datasetid", "period", "location", "product", "resource"],
+                        [1, 0, "SYN_A", "SYN_P", "SYN_R"]],
+            "bom": [["datasetid", "period", "location", "product", "bomnum", "input_output"],
+                    [1, 0, "SYN_A", "SYN_P", "SYN_BOM", -1]],
+            "transportation": [["datasetid", "period", "loc_from", "loc_to", "product", "transport_type", "resource"],
+                               [1, 0, "SYN_A", "SYN_T", "SYN_P", "SYN_A", "SYN_R"],
+                               [1, 0, "SYN_T", "SYN_B", "SYN_P", "SYN_A", "SYN_R"],
+                               [1, 0, "SYN_A", "SYN_A", "SYN_P", "SYN_A", "SYN_R"],
+                               [1, 0, "SYN_B", "SYN_A", "SYN_P", "SYN_A", "SYN_R"]],
+        }
+        for table, rows in fixture.items():
+            with (connected / f"optimizer_{table}.csv").open("w", encoding="utf-8", newline="") as stream:
+                csv.writer(stream).writerows(rows)
+        connected_outputs = []
+        for index in (1, 2):
+            output = root / f"connected-out-{index}"
+            subprocess.run([str(exe), "--input", str(connected), "--output", str(output),
+                            "--project", str(root / "connected.snpanon"), "--bypass-model",
+                            "--connectivity-profile", "builtin:optimizer-v1", "--require-integrity"], check=True, **kwargs)
+            report = json.loads((output / "report.json").read_text(encoding="utf-8"))
+            assert report["format"] == "snp-anonymizer-report-v2" and not report["model_applied"]
+            assert report["integrity_status"] == "PASSED" and report["publication_mode"] == "VERIFIED_INTEGRITY"
+            assert report["relationships_checked"] and report["keys_checked"] and report["dataset_published"]
+            profile_bytes = (output / "connectivity-profile.json").read_bytes()
+            assert hashlib.sha256(profile_bytes).hexdigest() == report["connectivity_profile_hash"]
+            manifest = json.loads((output / "csv/manifest.json").read_text(encoding="utf-8"))
+            rows_by_table = {}
+            for entry in manifest["tables"]:
+                with (output / "csv" / entry["file"]).open(encoding="utf-8", newline="") as stream:
+                    rows_by_table[entry["table"].removeprefix("optimizer_")] = list(csv.DictReader(stream))
+            routes = rows_by_table["transportation"]
+            location_a = rows_by_table["production"][0]["location"]
+            assert location_a == rows_by_table["procurement"][0]["supplier"] == routes[0]["loc_from"]
+            assert routes[0]["loc_to"] == routes[1]["loc_from"]  # transit has no demand row
+            assert routes[1]["loc_to"] == rows_by_table["demand"][0]["location"]
+            assert routes[2]["loc_from"] == routes[2]["loc_to"] == location_a
+            assert rows_by_table["demand"][0]["client"] != location_a
+            assert routes[0]["transport_type"] not in {location_a, rows_by_table["demand"][0]["client"]}
+            assert rows_by_table["production"][0]["bomnum"] == rows_by_table["bom"][0]["bomnum"]
+            assert rows_by_table["storage"][0]["resource"] == routes[0]["resource"]
+            assert rows_by_table["demand"][0]["quantity"] == "10.000001"
+            assert rows_by_table["production"][0]["extra"] != "SYN_PRIVATE_EXTRA"
+            connected_outputs.append(output)
+        assert (connected_outputs[0] / "dump.sql").read_bytes() == (connected_outputs[1] / "dump.sql").read_bytes()
+        refusal = root / "required-without-profile"
+        failed = subprocess.run([str(exe), "--input", str(connected), "--output", str(refusal),
+                                 "--project", str(root / "unchecked.snpanon"), "--bypass-model", "--require-integrity"], **kwargs)
+        assert failed.returncode == 1 and [p.name for p in refusal.iterdir()] == ["report.json"]
+        diagnostic = json.loads((refusal / "report.json").read_text(encoding="utf-8"))
+        assert diagnostic["integrity_status"] == "NOT_CHECKED" and diagnostic["dataset_published"] is False
+        assert diagnostic["publication_mode"] is None
+        print("EXE smoke: bundled Manrope, brand DS, SQL/CSV/XLSX, exact numbers/NULLs, legacy bypass, connectivity profile/common domains/transit/repeat, diagnostic-only refusal passed; no Python on child PATH")
 
 
 if __name__ == "__main__":

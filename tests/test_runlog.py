@@ -31,7 +31,7 @@ def test_success_run_logs_checks_and_export(tmp_path):
     assert events[0] == "start" and "published" in events
     (fk,) = [entry for entry in log.entries if entry[3] == "fk"]
     # Входная битая ссылка (SYN_X нет в parent) показывается до->после и не исправляется.
-    assert "public.child: x" in fk[4] and "1 -> 1" in fk[5] and fk[1] == "warning"
+    assert report["fields"][0]["schema"] + ".child: x" in fk[4] and "1 -> 1" in fk[5] and fk[1] == "warning"
     assert [entry for entry in log.entries if entry[3] == "key_group"]
     assert not any(entry[1] == "error" for entry in log.entries)
     # Journal is exported by explicit demand and never sits inside the package.

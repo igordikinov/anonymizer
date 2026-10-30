@@ -1,0 +1,979 @@
+{
+  "format": "snp-anonymizer-connectivity-v1",
+  "profile_id": "optimizer-v1",
+  "version": "1",
+  "namespace_rule": "source_schema",
+  "domains": [
+    {
+      "id": "LOCATION",
+      "kind": "auto",
+      "equality": "auto",
+      "prefix": "LOC",
+      "members": [
+        {
+          "table": "optimizer_demand",
+          "column": "location"
+        },
+        {
+          "table": "optimizer_storage",
+          "column": "location"
+        },
+        {
+          "table": "optimizer_production",
+          "column": "location"
+        },
+        {
+          "table": "optimizer_procurement",
+          "column": "location"
+        },
+        {
+          "table": "optimizer_bom",
+          "column": "location"
+        },
+        {
+          "table": "optimizer_transportation",
+          "column": "loc_from"
+        },
+        {
+          "table": "optimizer_transportation",
+          "column": "loc_to"
+        },
+        {
+          "table": "optimizer_procurement",
+          "column": "supplier"
+        }
+      ]
+    },
+    {
+      "id": "PRODUCT",
+      "kind": "auto",
+      "equality": "auto",
+      "prefix": "PRD",
+      "members": [
+        {
+          "table": "optimizer_demand",
+          "column": "product"
+        },
+        {
+          "table": "optimizer_storage",
+          "column": "product"
+        },
+        {
+          "table": "optimizer_production",
+          "column": "product"
+        },
+        {
+          "table": "optimizer_procurement",
+          "column": "product"
+        },
+        {
+          "table": "optimizer_bom",
+          "column": "product"
+        },
+        {
+          "table": "optimizer_transportation",
+          "column": "product"
+        }
+      ]
+    },
+    {
+      "id": "RESOURCE",
+      "kind": "auto",
+      "equality": "auto",
+      "prefix": "RES",
+      "members": [
+        {
+          "table": "optimizer_production",
+          "column": "resource"
+        },
+        {
+          "table": "optimizer_storage",
+          "column": "resource"
+        },
+        {
+          "table": "optimizer_transportation",
+          "column": "resource"
+        }
+      ]
+    },
+    {
+      "id": "BOM",
+      "kind": "auto",
+      "equality": "auto",
+      "prefix": "BOM",
+      "members": [
+        {
+          "table": "optimizer_production",
+          "column": "bomnum"
+        },
+        {
+          "table": "optimizer_bom",
+          "column": "bomnum"
+        }
+      ]
+    },
+    {
+      "id": "TRANSPORT_TYPE",
+      "kind": "auto",
+      "equality": "auto",
+      "prefix": "TRN",
+      "members": [
+        {
+          "table": "optimizer_transportation",
+          "column": "transport_type"
+        }
+      ]
+    },
+    {
+      "id": "CLIENT",
+      "kind": "auto",
+      "equality": "auto",
+      "prefix": "CLN",
+      "members": [
+        {
+          "table": "optimizer_demand",
+          "column": "client"
+        }
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "id": "roles:LOCATION",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "optimizer_demand",
+            "columns": [
+              "datasetid",
+              "location"
+            ]
+          },
+          {
+            "table": "optimizer_storage",
+            "columns": [
+              "datasetid",
+              "location"
+            ]
+          },
+          {
+            "table": "optimizer_production",
+            "columns": [
+              "datasetid",
+              "location"
+            ]
+          },
+          {
+            "table": "optimizer_procurement",
+            "columns": [
+              "datasetid",
+              "location"
+            ]
+          },
+          {
+            "table": "optimizer_bom",
+            "columns": [
+              "datasetid",
+              "location"
+            ]
+          },
+          {
+            "table": "optimizer_transportation",
+            "columns": [
+              "datasetid",
+              "loc_from"
+            ]
+          },
+          {
+            "table": "optimizer_transportation",
+            "columns": [
+              "datasetid",
+              "loc_to"
+            ]
+          },
+          {
+            "table": "optimizer_procurement",
+            "columns": [
+              "datasetid",
+              "supplier"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "optimizer_demand",
+            "columns": [
+              "datasetid",
+              "location"
+            ]
+          },
+          {
+            "table": "optimizer_storage",
+            "columns": [
+              "datasetid",
+              "location"
+            ]
+          },
+          {
+            "table": "optimizer_production",
+            "columns": [
+              "datasetid",
+              "location"
+            ]
+          },
+          {
+            "table": "optimizer_procurement",
+            "columns": [
+              "datasetid",
+              "location"
+            ]
+          },
+          {
+            "table": "optimizer_bom",
+            "columns": [
+              "datasetid",
+              "location"
+            ]
+          },
+          {
+            "table": "optimizer_transportation",
+            "columns": [
+              "datasetid",
+              "loc_from"
+            ]
+          },
+          {
+            "table": "optimizer_transportation",
+            "columns": [
+              "datasetid",
+              "loc_to"
+            ]
+          },
+          {
+            "table": "optimizer_procurement",
+            "columns": [
+              "datasetid",
+              "supplier"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    },
+    {
+      "id": "roles:PRODUCT",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "optimizer_demand",
+            "columns": [
+              "datasetid",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_storage",
+            "columns": [
+              "datasetid",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_production",
+            "columns": [
+              "datasetid",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_procurement",
+            "columns": [
+              "datasetid",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_bom",
+            "columns": [
+              "datasetid",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_transportation",
+            "columns": [
+              "datasetid",
+              "product"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "optimizer_demand",
+            "columns": [
+              "datasetid",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_storage",
+            "columns": [
+              "datasetid",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_production",
+            "columns": [
+              "datasetid",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_procurement",
+            "columns": [
+              "datasetid",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_bom",
+            "columns": [
+              "datasetid",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_transportation",
+            "columns": [
+              "datasetid",
+              "product"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    },
+    {
+      "id": "roles:RESOURCE",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "optimizer_production",
+            "columns": [
+              "datasetid",
+              "resource"
+            ]
+          },
+          {
+            "table": "optimizer_storage",
+            "columns": [
+              "datasetid",
+              "resource"
+            ]
+          },
+          {
+            "table": "optimizer_transportation",
+            "columns": [
+              "datasetid",
+              "resource"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "optimizer_production",
+            "columns": [
+              "datasetid",
+              "resource"
+            ]
+          },
+          {
+            "table": "optimizer_storage",
+            "columns": [
+              "datasetid",
+              "resource"
+            ]
+          },
+          {
+            "table": "optimizer_transportation",
+            "columns": [
+              "datasetid",
+              "resource"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    },
+    {
+      "id": "roles:BOM",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "optimizer_production",
+            "columns": [
+              "datasetid",
+              "bomnum"
+            ]
+          },
+          {
+            "table": "optimizer_bom",
+            "columns": [
+              "datasetid",
+              "bomnum"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "optimizer_production",
+            "columns": [
+              "datasetid",
+              "bomnum"
+            ]
+          },
+          {
+            "table": "optimizer_bom",
+            "columns": [
+              "datasetid",
+              "bomnum"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    },
+    {
+      "id": "roles:TRANSPORT_TYPE",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "optimizer_transportation",
+            "columns": [
+              "datasetid",
+              "transport_type"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "optimizer_transportation",
+            "columns": [
+              "datasetid",
+              "transport_type"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    },
+    {
+      "id": "roles:CLIENT",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "optimizer_demand",
+            "columns": [
+              "datasetid",
+              "client"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "optimizer_demand",
+            "columns": [
+              "datasetid",
+              "client"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    },
+    {
+      "id": "roles:LOCATION_PRODUCT",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "optimizer_demand",
+            "columns": [
+              "datasetid",
+              "location",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_storage",
+            "columns": [
+              "datasetid",
+              "location",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_production",
+            "columns": [
+              "datasetid",
+              "location",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_procurement",
+            "columns": [
+              "datasetid",
+              "location",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_bom",
+            "columns": [
+              "datasetid",
+              "location",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_transportation",
+            "columns": [
+              "datasetid",
+              "loc_from",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_transportation",
+            "columns": [
+              "datasetid",
+              "loc_to",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_procurement",
+            "columns": [
+              "datasetid",
+              "supplier",
+              "product"
+            ]
+          }
+        ],
+        "projection": "set"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "optimizer_demand",
+            "columns": [
+              "datasetid",
+              "location",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_storage",
+            "columns": [
+              "datasetid",
+              "location",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_production",
+            "columns": [
+              "datasetid",
+              "location",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_procurement",
+            "columns": [
+              "datasetid",
+              "location",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_bom",
+            "columns": [
+              "datasetid",
+              "location",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_transportation",
+            "columns": [
+              "datasetid",
+              "loc_from",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_transportation",
+            "columns": [
+              "datasetid",
+              "loc_to",
+              "product"
+            ]
+          },
+          {
+            "table": "optimizer_procurement",
+            "columns": [
+              "datasetid",
+              "supplier",
+              "product"
+            ]
+          }
+        ],
+        "projection": "set"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    },
+    {
+      "id": "period:optimizer_demand",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "optimizer_demand",
+            "columns": [
+              "datasetid",
+              "period"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "optimizer_periods",
+            "columns": [
+              "datasetid",
+              "period"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "period:optimizer_storage",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "optimizer_storage",
+            "columns": [
+              "datasetid",
+              "period"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "optimizer_periods",
+            "columns": [
+              "datasetid",
+              "period"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "period:optimizer_production",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "optimizer_production",
+            "columns": [
+              "datasetid",
+              "period"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "optimizer_periods",
+            "columns": [
+              "datasetid",
+              "period"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "period:optimizer_procurement",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "optimizer_procurement",
+            "columns": [
+              "datasetid",
+              "period"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "optimizer_periods",
+            "columns": [
+              "datasetid",
+              "period"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "period:optimizer_bom",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "optimizer_bom",
+            "columns": [
+              "datasetid",
+              "period"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "optimizer_periods",
+            "columns": [
+              "datasetid",
+              "period"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "period:optimizer_transportation",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "optimizer_transportation",
+            "columns": [
+              "datasetid",
+              "period"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "optimizer_periods",
+            "columns": [
+              "datasetid",
+              "period"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    }
+  ],
+  "keys": [
+    {
+      "id": "key:optimizer_periods",
+      "table": "optimizer_periods",
+      "columns": [
+        "datasetid",
+        "period"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    },
+    {
+      "id": "key:optimizer_demand",
+      "table": "optimizer_demand",
+      "columns": [
+        "datasetid",
+        "period",
+        "location",
+        "product",
+        "client"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    },
+    {
+      "id": "key:optimizer_procurement",
+      "table": "optimizer_procurement",
+      "columns": [
+        "datasetid",
+        "period",
+        "location",
+        "product",
+        "supplier"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    },
+    {
+      "id": "key:optimizer_production",
+      "table": "optimizer_production",
+      "columns": [
+        "datasetid",
+        "period",
+        "location",
+        "product",
+        "bomnum",
+        "resource"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    },
+    {
+      "id": "key:optimizer_storage",
+      "table": "optimizer_storage",
+      "columns": [
+        "datasetid",
+        "period",
+        "location",
+        "product",
+        "resource"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    },
+    {
+      "id": "key:optimizer_transportation",
+      "table": "optimizer_transportation",
+      "columns": [
+        "datasetid",
+        "period",
+        "loc_from",
+        "loc_to",
+        "product",
+        "transport_type",
+        "resource"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    },
+    {
+      "id": "key:optimizer_bom",
+      "table": "optimizer_bom",
+      "columns": [
+        "datasetid",
+        "period",
+        "location",
+        "product",
+        "bomnum",
+        "input_output"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    }
+  ],
+  "required_checks": [
+    "domain:LOCATION",
+    "roles:LOCATION",
+    "domain:PRODUCT",
+    "roles:PRODUCT",
+    "domain:RESOURCE",
+    "roles:RESOURCE",
+    "domain:BOM",
+    "roles:BOM",
+    "domain:TRANSPORT_TYPE",
+    "roles:TRANSPORT_TYPE",
+    "domain:CLIENT",
+    "roles:CLIENT",
+    "roles:LOCATION_PRODUCT",
+    "period:optimizer_demand",
+    "period:optimizer_storage",
+    "period:optimizer_production",
+    "period:optimizer_procurement",
+    "period:optimizer_bom",
+    "period:optimizer_transportation",
+    "key:optimizer_periods",
+    "key:optimizer_demand",
+    "key:optimizer_procurement",
+    "key:optimizer_production",
+    "key:optimizer_storage",
+    "key:optimizer_transportation",
+    "key:optimizer_bom"
+  ],
+  "missing_target_policy": "not_checked"
+}

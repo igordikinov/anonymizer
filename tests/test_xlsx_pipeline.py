@@ -134,7 +134,7 @@ def test_formula_skip_removes_partial_book_keeps_csv(tmp_path):
     output = tmp_path / "out"
     report = run(Options(folder, output, tmp_path / "private.snpanon", skip_error_tables=True))
     assert report["rows"] == 1 and report["tables"] == 1
-    assert [t["table"] for t in report["skipped_tables"]] == ["public.item"]
+    assert [t["table"] for t in report["skipped_tables"]] == [report["fields"][0]["schema"] + ".item"]
     assert set(exported_tables(output)) == {"loc"}
     assert "=1+1" not in json.dumps(report)
 
