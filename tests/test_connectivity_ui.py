@@ -16,7 +16,9 @@ def report(status="PASSED", source="PASSED"):
             "validation": {"foreign_keys": []}}
 
 
-@pytest.mark.parametrize("profile,required", [(None, False), ("builtin:optimizer-v2", True), ("custom profile.json", False)])
+@pytest.mark.parametrize("profile,required", [(None, False), ("builtin:snp-v1", True),
+                                              ("builtin:snp-v1", False), ("builtin:optimizer-v2", True),
+                                              ("custom profile.json", False)])
 def test_cli_routes_profile_and_requirement_without_changing_legacy_defaults(tmp_path, monkeypatch, capsys, profile, required):
     received = []
     monkeypatch.setattr(cli, "run", lambda options: received.append(options) or report())
@@ -48,6 +50,14 @@ def test_cli_diagnostic_failure_is_nonzero_and_does_not_print_success(tmp_path, 
     assert captured.out == "" and "RELATION_CHANGED" in captured.err
 
 
+def test_cli_help_lists_separate_snp_and_optimizer_profiles(capsys):
+    with pytest.raises(SystemExit) as result:
+        cli.main(["--help"])
+    assert result.value.code == 0
+    help_text = capsys.readouterr().out
+    assert "builtin:snp-v1" in help_text and "builtin:optimizer-v2" in help_text
+
+
 def app_surface(tk_root):
     for child in tk_root.winfo_children():
         child.destroy()
@@ -56,29 +66,32 @@ def app_surface(tk_root):
     return app
 
 
-def test_gui_profile_selection_requires_integrity_but_allows_explicit_unverified(tk_root):
+@pytest.mark.parametrize("choice,profile", [("SNP v1", "builtin:snp-v1"), ("Optimizer v2", "builtin:optimizer-v2")])
+def test_gui_profile_selection_requires_integrity_but_allows_explicit_unverified(tk_root, choice, profile):
     app = app_surface(tk_root)
     assert app.connectivity_options() is None and not app.require_integrity.get()
     assert app.profile_file_entry.instate(["disabled"])
-    app.connectivity_choice.set("Optimizer v2")
+    assert "SNP v1" in app.connectivity_selector.cget("values")
+    app.connectivity_choice.set(choice)
     app.connectivity_selected()
-    assert app.connectivity_options() == "builtin:optimizer-v2" and app.require_integrity.get()
+    assert app.connectivity_options() == profile and app.require_integrity.get()
     app.require_integrity.set(False)
-    assert app.connectivity_options() == "builtin:optimizer-v2" and not app.require_integrity.get()
+    assert app.connectivity_options() == profile and not app.require_integrity.get()
     app.connectivity_choice.set("Без профиля")
     app.connectivity_selected()
     assert app.connectivity_options() is None and not app.require_integrity.get()
 
 
-def test_gui_json_picker_cancel_preserves_previous_profile_and_requirement(tk_root, monkeypatch):
+@pytest.mark.parametrize("choice", ["SNP v1", "Optimizer v2"])
+def test_gui_json_picker_cancel_preserves_previous_profile_and_requirement(tk_root, monkeypatch, choice):
     app = app_surface(tk_root)
-    app.connectivity_choice.set("Optimizer v2")
+    app.connectivity_choice.set(choice)
     app.connectivity_selected()
     app.require_integrity.set(False)
     monkeypatch.setattr(gui.filedialog, "askopenfilename", lambda **kwargs: "")
     app.connectivity_choice.set("JSON-файл…")
     app.connectivity_selected()
-    assert app.connectivity_choice.get() == "Optimizer v2"
+    assert app.connectivity_choice.get() == choice
     assert not app.require_integrity.get()
     assert app.profile_file_entry.instate(["disabled"])
 
@@ -105,6 +118,26 @@ def test_gui_json_profile_reaches_pipeline_and_controls_restore(tmp_path, tk_roo
     assert app.connectivity_selector.instate(["readonly"])
     assert app.profile_file_entry.instate(["!disabled"])
     assert "Обязательные проверки" in app.result.get() and "исходные дефекты" in app.result.get()
+
+
+def test_gui_snp_profile_reaches_pipeline_and_restores_builtin_controls(tmp_path, tk_root, monkeypatch):
+    app = app_surface(tk_root)
+    app.connectivity_choice.set("SNP v1")
+    app.connectivity_selected()
+    received = []
+    monkeypatch.setattr(gui, "run", lambda options, *args: received.append(options) or report())
+    monkeypatch.setattr(gui.threading, "Thread", lambda **kwargs: SimpleNamespace(start=kwargs["target"]))
+    app.source.set(str(tmp_path / "source.sql"))
+    app.output.set(str(tmp_path / "out"))
+    app.project.set(str(tmp_path / "private.snpanon"))
+    app.bypass_model.set(True)
+    app.start()
+    options, = received
+    assert options.connectivity_profile == "builtin:snp-v1" and options.require_integrity and options.bypass_model
+    app._poll_once()
+    assert app.connectivity_selector.instate(["readonly"])
+    assert app.profile_file_entry.instate(["disabled"])
+    assert not app.profile_file_frame.winfo_manager()
 
 
 def test_gui_unverified_success_and_diagnostic_failure_are_not_reported_as_pass(tk_root, monkeypatch):

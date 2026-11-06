@@ -18,6 +18,10 @@ PROFILE_FORMAT = "snp-anonymizer-connectivity-v1"
 COMPILER_VERSION = "1"
 MAX_PROFILE_BYTES = 1024 * 1024
 MAX_CONTRACT_BYTES = 16 * 1024 * 1024
+BUILTIN_PROFILES = {
+    "builtin:optimizer-v2": "optimizer-v2.json",
+    "builtin:snp-v1": "snp-v1.json",
+}
 OPTIMIZER_RESOURCES = {
     ("optimizer_production", "resource"): ("RESOURCE_PROD", "resource_prod"),
     ("optimizer_storage", "resource"): ("RESOURCE_STOCK", "resource_stock"),
@@ -216,8 +220,8 @@ def load_profile(value=None):
         if isinstance(value, dict):
             raw = _json(value).encode("utf-8")
         else:
-            if str(value) == "builtin:optimizer-v2":
-                resource = files("anonymizer").joinpath("resources/connectivity/optimizer-v2.json")
+            if str(value) in BUILTIN_PROFILES:
+                resource = files("anonymizer").joinpath("resources/connectivity/" + BUILTIN_PROFILES[str(value)])
                 with resource.open("rb") as stream:
                     raw = stream.read(MAX_PROFILE_BYTES + 1)
             else:
@@ -230,6 +234,20 @@ def load_profile(value=None):
         raise
     except (OSError, UnicodeError, ValueError, TypeError, RecursionError):
         raise ContractError("Не удалось прочитать JSON-профиль связности.") from None
+
+
+def input_text_hints(profile):
+    """SNP v1 explicitly declares symbolic input roles before inference.
+
+    Keep this opt-in canonical contract separate from Optimizer and existing
+    custom profiles. Declared SQL/manifest types never call the inference path.
+    The returned immutable metadata is charged to the Store catalog budget.
+    """
+    if profile is None or profile.get("profile_id") != "snp-v1" or profile != load_profile("builtin:snp-v1"):
+        return frozenset()
+    return frozenset((member["table"], member["column"])
+                     for domain in profile["domains"] if domain["kind"] == "TEXT"
+                     for member in domain["members"])
 
 
 def _physical(store, name):

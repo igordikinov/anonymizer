@@ -26,7 +26,7 @@ def csv_source(tmp_path, table, rows):
 @pytest.mark.parametrize("raw,kind", [
     ("0", "NUMBER"), ("-1.234567890123456789", "NUMBER"), ("1e-6", "NUMBER"),
     (".5", "NUMBER"), ("1.", "NUMBER"), ("-.5e+2", "NUMBER"),
-    ("001", "TEXT"), (" 1", "TEXT"), ("1 ", "TEXT"), ("1,5", "TEXT"),
+    ("001", "TEXT"), (" 1", "TEXT"), ("1 ", "TEXT"), ("1,5", "NUMBER"),
     ("2026-10-29", "DATE"), ("2026-10-29T01:02:03.123456", "DATE_TIME"),
     ("12:34:56", "TIME"), ("2026-02-30", "TEXT"), ("true", "BOOLEAN"),
     ("2026-10-29T01:02:03+03:00", "DATE_TIME"), ("12:34:56+03:00", "TIME"),

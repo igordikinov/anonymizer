@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 from .errors import AnonymizerError, Cancelled
-from .generic_input import InputLimitError
+from .generic_input import InputLimitError, normalize_number_cell
 from .metadata import SYSTEM
 from .sql_reader import MAX_FIELD
 
@@ -132,6 +132,9 @@ def _read_csv_file(store, check, entry, file, encoding, delimiter, manifest, pat
         nullable_numbers = {f["name"] for f in store.tables.get(name, {}).get("fields", ())
                             if f["name"] not in SYSTEM and f["type"] in {"NUMBER", "INTEGER"}
                             and f.get("nullable", True)} if manifest is None else set()
+        numeric_columns = {f["name"]: f for f in store.tables.get(name, {}).get("fields", ())
+                           if f["name"] not in SYSTEM and f["type"] in {"NUMBER", "INTEGER"}}
+        numeric_indexes = [(i, numeric_columns[col]) for i, col in enumerate(full_header) if col in numeric_columns]
         null_columns = nullable_numbers | set(marked_empty_null)
         empty_as_null = {i for i, col in enumerate(full_header) if col in null_columns}
         for row in reader:
@@ -146,6 +149,8 @@ def _read_csv_file(store, check, entry, file, encoding, delimiter, manifest, pat
             values = [None if value == r"\N" or (value == "" and i in empty_as_null)
                       else (value[1:] if manifest and value.startswith("\\\\") else value)
                       for i, value in enumerate(row)]
+            for i, field in numeric_indexes:
+                values[i] = normalize_number_cell(values[i], field)
             if store.bypass_model:
                 store.observe_input(name, values)
             store.add_row(name, header, [values[i] for i in kept_indexes])

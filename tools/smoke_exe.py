@@ -117,6 +117,35 @@ def check(exe):
             book.save(path)
             book.close()
 
+        # Decimal comma at the external boundary: semicolon CSV, quoted comma
+        # CSV and text XLSX cells, both with the model and with full bypass.
+        exact_decimal = "-2476.700000000000000001"
+        for bypass in (False, True):
+            table = "custom" if bypass else "item"
+            columns = ["code", "quantity"] if bypass else ["item", "volume"]
+            for kind in ("semicolon", "quoted", "xlsx"):
+                directory = root / f"comma-{bypass}-{kind}"
+                directory.mkdir()
+                rows = [columns, ["SYN_COMMA", exact_decimal.replace(".", ",")]]
+                if kind == "xlsx":
+                    source = directory / f"{table}.xlsx"
+                    write_book(source, rows)
+                else:
+                    with (directory / f"{table}.csv").open("w", encoding="utf-8", newline="") as stream:
+                        csv.writer(stream, delimiter=";" if kind == "semicolon" else ",").writerows(rows)
+                    source = directory
+                output = root / f"comma-out-{bypass}-{kind}"
+                args = [str(exe), "--input", str(source), "--output", str(output),
+                        "--project", str(root / f"comma-{bypass}-{kind}.snpanon")]
+                subprocess.run(args + (["--bypass-model"] if bypass else []), check=True, **kwargs)
+                manifest = json.loads((output / "csv/manifest.json").read_text(encoding="utf-8"))
+                entry, = manifest["tables"]
+                with (output / "csv" / entry["file"]).open(encoding="utf-8", newline="") as stream:
+                    row, = list(csv.DictReader(stream))
+                assert row[columns[1]] == exact_decimal and row[columns[0]] != "SYN_COMMA"
+                for filename in ("dump.sql", "inserts.sql"):
+                    assert exact_decimal in (output / filename).read_text(encoding="utf-8")
+
         xlsx_source = root / "xlsx-source"
         xlsx_source.mkdir()
         item_book = xlsx_source / "item.xlsx"
@@ -284,7 +313,7 @@ def check(exe):
         diagnostic = json.loads((refusal / "report.json").read_text(encoding="utf-8"))
         assert diagnostic["integrity_status"] == "NOT_CHECKED" and diagnostic["dataset_published"] is False
         assert diagnostic["publication_mode"] is None
-        print("EXE smoke: bundled Manrope, brand DS, SQL/CSV/XLSX, exact numbers/NULLs, legacy bypass, Optimizer v2 independent prefixed resources/transit/repeat, diagnostic-only refusals passed; no Python on child PATH")
+        print("EXE smoke: bundled Manrope, brand DS, SQL/CSV/XLSX, decimal comma/exact numbers/NULLs, legacy bypass, Optimizer v2 independent prefixed resources/transit/repeat, diagnostic-only refusals passed; no Python on child PATH")
 
 
 if __name__ == "__main__":

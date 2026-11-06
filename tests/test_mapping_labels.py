@@ -10,7 +10,7 @@ from openpyxl import load_workbook
 from anonymizer.connectivity import compile_contract, load_profile
 from anonymizer.errors import AnonymizerError, Cancelled
 from anonymizer.mapping import Project
-from anonymizer.mapping_export import HEADER, LABEL_BYTES, LABEL_MARKER, iter_mapping_rows, write_mapping_xlsx
+from anonymizer.mapping_export import HEADER, LABEL_BYTES, LABEL_MARKER, SNP_DOMAIN_TITLES, iter_mapping_rows, write_mapping_xlsx
 from anonymizer.metadata import Model
 from anonymizer.pipeline import Options, run
 from anonymizer.store import Store
@@ -140,6 +140,46 @@ def test_shared_namespace_lists_full_paths_and_custom_profile_does_not_borrow_bu
         assert "Ресурс" not in label
     with project_for(tmp_path, path, tables[:1], custom_profile(shared=True)) as project:
         assert list(iter_mapping_rows(project)) == shown
+
+
+def test_snp_domains_have_readable_titles_without_optimizer_resource_meaning(tmp_path):
+    tables = [("public", table, column, ("SYN_A",)) for table, column in (
+        ("item", "item"), ("loc", "loc"), ("mot", "mot"), ("res", "res"),
+        ("prodsource_sp", "prodsource"), ("demand_stream", "dmdstream"),
+        ("sp_demand", "demandtype"), ("tlane_mot", "transpcostuom"),
+        ("tlane_prod_mot", "tlanecal"), ("res_attributes", "resgroup"))]
+    with project_for(tmp_path, tmp_path / "snp.snpanon", tables, "builtin:snp-v1") as project:
+        raw = list(project.iter_mapping())
+        shown = list(iter_mapping_rows(project))
+        assert {(old, new) for _, old, new in shown} == {(old, new) for _, old, new in raw}
+        labels = {label for label, _, _ in shown}
+        assert len(labels) == len(SNP_DOMAIN_TITLES) == 10
+        for identifier, title in SNP_DOMAIN_TITLES.items():
+            label, = [label for label in labels if label.startswith(f"{title} ({identifier}), схема public:")]
+            assert "connectivity:" not in label
+        resource, = [label for label in labels if "(RESOURCE)" in label]
+        assert "res.res" in resource and "optimizer_" not in resource
+        assert all("RESOURCE_PROD" not in label and "RESOURCE_STOCK" not in label
+                   and "RESOURCE_TRANSP" not in label for label in labels)
+
+
+def test_snp_profile_id_alone_does_not_grant_builtin_titles(tmp_path):
+    profile = custom_profile()
+    profile["profile_id"] = "snp-v1"
+    with project_for(tmp_path, tmp_path / "snp-spoof.snpanon",
+                     [("public", "assets", "code", ("SYN_A",))], profile) as project:
+        shown, = list(iter_mapping_rows(project))
+        assert shown[0].startswith("Домен RESOURCE, схема public:")
+        assert "Ресурс SNP" not in shown[0]
+
+
+def test_canonical_snp_json_profile_keeps_builtin_titles(tmp_path):
+    profile_path = tmp_path / "snp.json"
+    profile_path.write_text(json.dumps(load_profile("builtin:snp-v1"), ensure_ascii=False), encoding="utf-8")
+    with project_for(tmp_path, tmp_path / "snp-json.snpanon",
+                     [("public", "res", "res", ("SYN_A",))], profile_path) as project:
+        shown, = list(iter_mapping_rows(project))
+        assert shown[0].startswith("Ресурс SNP (RESOURCE), схема public:")
 
 
 def test_external_source_schema_namespace_stays_distinguishable(tmp_path):

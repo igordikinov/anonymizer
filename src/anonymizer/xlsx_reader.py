@@ -18,6 +18,7 @@ from .generic_input import InputLimitError
 from .metadata import SYSTEM
 from .sql_reader import MAX_FIELD
 from .validation import validate_value
+from .generic_input import normalize_number_cell
 
 MAX_UNCOMPRESSED = 4 * 1024**3
 MAX_METADATA = 8 * 1024**2
@@ -610,6 +611,12 @@ def _worksheet(package, part, strings, store, name, epoch, check, styles=None):
                             native = {"n": "NUMBER", "b": "BOOLEAN"}.get(typ, "TEXT")
                             if value == r"\N":
                                 value = None
+                            if store.input_text_column(name, index - 1):
+                                # A symbolic code is the stored lexeme, not a
+                                # number/date inferred from Excel formatting.
+                                values.append(value)
+                                native_types.append("TEXT" if value is not None else None)
+                                continue
                             if value is not None:
                                 if typ == "n" and row_styles.get(index):
                                     native = row_styles[index]
@@ -628,6 +635,8 @@ def _worksheet(package, part, strings, store, name, epoch, check, styles=None):
                         if value == r"\N" or (value == "" and field["type"] in {"NUMBER", "INTEGER"} and field.get("nullable", True)):
                             value = None
                         if value is not None:
+                            if field["type"] in {"NUMBER", "INTEGER"}:
+                                value = normalize_number_cell(value, field)
                             if typ == "n" and field["type"] in {"DATE", "DATE_TIME", "TIME"}:
                                 value = _date_value(value, field["type"], epoch)
                             elif typ == "b":

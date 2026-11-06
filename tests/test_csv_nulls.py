@@ -51,7 +51,7 @@ def test_plain_csv_typed_blanks_respect_type_and_nullable(tmp_path, cell):
                 validate_value("csv_contract", field, value)
 
 
-@pytest.mark.parametrize("value", ["0", "-0.000001", "12345678901234567890.123456789", "1e-6", " ", "\t", "30,0", "NULL"])
+@pytest.mark.parametrize("value", ["0", "-0.000001", "12345678901234567890.123456789", "1e-6", " ", "\t", "NULL"])
 def test_nonempty_numeric_input_is_not_rewritten(tmp_path, value):
     source = tmp_path / "source"
     source.mkdir()
@@ -62,7 +62,7 @@ def test_nonempty_numeric_input_is_not_rewritten(tmp_path, value):
         parse_csv(source, store, delimiter=";")
         row, = store.rows(1)
         assert row[:3] == [value, None, "1"]
-        if value in {" ", "\t", "30,0", "NULL"}:
+        if value in {" ", "\t", "NULL"}:
             with pytest.raises(AnonymizerError):
                 validate_value("csv_contract", store.tables[("public", "csv_contract")]["fields"][0], row[0])
 

@@ -28,6 +28,11 @@ DOMAIN_TITLES = {"LOCATION": "Локация", "PRODUCT": "Продукт",
                  "RESOURCE_PROD": "Ресурс производства", "RESOURCE_STOCK": "Ресурс хранения",
                  "RESOURCE_TRANSP": "Ресурс перевозки",
                  "BOM": "Спецификация", "TRANSPORT_TYPE": "Тип транспорта", "CLIENT": "Клиент"}
+SNP_DOMAIN_TITLES = {"ITEM": "Товар", "LOCATION": "Локация", "MOT": "Способ перевозки",
+                     "RESOURCE": "Ресурс SNP", "PRODSOURCE": "Источник производства",
+                     "DEMAND_STREAM": "Поток спроса", "DEMAND_TYPE": "Тип спроса",
+                     "UOM": "Единица измерения", "CALENDAR": "Календарь",
+                     "RESOURCE_GROUP": "Группа ресурсов"}
 
 
 def iter_mapping_rows(project, check=lambda: None):
@@ -42,7 +47,11 @@ def iter_mapping_rows(project, check=lambda: None):
     if contract is None:
         yield from project.iter_mapping()
         return
-    builtin = contract.profile_hash == _hash(load_profile("builtin:optimizer-v2"))
+    titles = {}
+    if contract.profile_hash == _hash(load_profile("builtin:optimizer-v2")):
+        titles = DOMAIN_TITLES
+    elif contract.profile_hash == _hash(load_profile("builtin:snp-v1")):
+        titles = SNP_DOMAIN_TITLES
     mappings, bindings = project.iter_mapping(), None
     interrupted = None
 
@@ -104,7 +113,7 @@ def iter_mapping_rows(project, check=lambda: None):
                 if spec is None:
                     invalid()
                 ident = spec["id"]
-                title = f"{DOMAIN_TITLES[ident]} ({ident})" if builtin and ident in DOMAIN_TITLES else f"Домен {ident}"
+                title = f"{titles[ident]} ({ident})" if ident in titles else f"Домен {ident}"
                 shared = contract.profile["namespace_rule"] == "shared"
                 label = title + (", общий namespace:" if shared else f", схема {namespace}:")
                 size, truncated = len(label.encode("utf-8")), False

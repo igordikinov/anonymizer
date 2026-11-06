@@ -1,0 +1,2908 @@
+{
+  "format": "snp-anonymizer-connectivity-v1",
+  "profile_id": "snp-v1",
+  "version": "1",
+  "namespace_rule": "source_schema",
+  "domains": [
+    {
+      "id": "CALENDAR",
+      "kind": "TEXT",
+      "equality": "exact",
+      "prefix": "cal",
+      "members": [
+        {
+          "table": "loc",
+          "column": "arrivecal"
+        },
+        {
+          "table": "tlane_prod_mot",
+          "column": "arrivecal"
+        },
+        {
+          "table": "res",
+          "column": "calid_resequipnum"
+        },
+        {
+          "table": "sp_demand_profile",
+          "column": "calld_consumption_config_id"
+        },
+        {
+          "table": "sp_demand_profile",
+          "column": "calld_proration_config_id"
+        },
+        {
+          "table": "sp_demand_profile",
+          "column": "consumption_config_id"
+        },
+        {
+          "table": "loc",
+          "column": "prodcal"
+        },
+        {
+          "table": "sp_demand_profile",
+          "column": "proration_config_id"
+        },
+        {
+          "table": "res",
+          "column": "rescal"
+        },
+        {
+          "table": "loc",
+          "column": "shipcal"
+        },
+        {
+          "table": "tlane_prod_mot",
+          "column": "shipcal"
+        },
+        {
+          "table": "tlane_prod_mot",
+          "column": "tlanecal"
+        },
+        {
+          "table": "tlane_mot",
+          "column": "tlanemotcal"
+        }
+      ]
+    },
+    {
+      "id": "DEMAND_STREAM",
+      "kind": "TEXT",
+      "equality": "exact",
+      "prefix": "ds",
+      "members": [
+        {
+          "table": "demand_stream",
+          "column": "dmdstream"
+        },
+        {
+          "table": "sp_demand",
+          "column": "dmdstream"
+        },
+        {
+          "table": "sp_demand_profile",
+          "column": "dmdstream"
+        }
+      ]
+    },
+    {
+      "id": "DEMAND_TYPE",
+      "kind": "TEXT",
+      "equality": "exact",
+      "prefix": "dt",
+      "members": [
+        {
+          "table": "sp_demand",
+          "column": "demandtype"
+        },
+        {
+          "table": "sp_demand_profile",
+          "column": "demandtype"
+        }
+      ]
+    },
+    {
+      "id": "ITEM",
+      "kind": "TEXT",
+      "equality": "exact",
+      "prefix": "item",
+      "members": [
+        {
+          "table": "comp_req_sp",
+          "column": "comp"
+        },
+        {
+          "table": "comp_req_sp",
+          "column": "item"
+        },
+        {
+          "table": "item",
+          "column": "item"
+        },
+        {
+          "table": "prod_cap_req_sp",
+          "column": "item"
+        },
+        {
+          "table": "prodsource_sp",
+          "column": "item"
+        },
+        {
+          "table": "sku_attributes",
+          "column": "item"
+        },
+        {
+          "table": "sp_demand",
+          "column": "item"
+        },
+        {
+          "table": "sp_demand_profile",
+          "column": "item"
+        },
+        {
+          "table": "stock_levels",
+          "column": "item"
+        },
+        {
+          "table": "tlane_prod_mot",
+          "column": "item"
+        }
+      ]
+    },
+    {
+      "id": "LOCATION",
+      "kind": "TEXT",
+      "equality": "exact",
+      "prefix": "loc",
+      "members": [
+        {
+          "table": "comp_req_sp",
+          "column": "loc"
+        },
+        {
+          "table": "loc",
+          "column": "loc"
+        },
+        {
+          "table": "prod_cap_req_sp",
+          "column": "loc"
+        },
+        {
+          "table": "prodsource_sp",
+          "column": "loc"
+        },
+        {
+          "table": "res",
+          "column": "loc"
+        },
+        {
+          "table": "res_attributes",
+          "column": "loc"
+        },
+        {
+          "table": "rescapacity",
+          "column": "loc"
+        },
+        {
+          "table": "sku_attributes",
+          "column": "loc"
+        },
+        {
+          "table": "sp_demand",
+          "column": "loc"
+        },
+        {
+          "table": "sp_demand_profile",
+          "column": "loc"
+        },
+        {
+          "table": "stock_levels",
+          "column": "loc"
+        },
+        {
+          "table": "tlane_mot",
+          "column": "locfr"
+        },
+        {
+          "table": "tlane_prod_mot",
+          "column": "locfr"
+        },
+        {
+          "table": "tlane_mot",
+          "column": "locto"
+        },
+        {
+          "table": "tlane_prod_mot",
+          "column": "locto"
+        }
+      ]
+    },
+    {
+      "id": "MOT",
+      "kind": "TEXT",
+      "equality": "exact",
+      "prefix": "mot",
+      "members": [
+        {
+          "table": "mot",
+          "column": "mot"
+        },
+        {
+          "table": "tlane_mot",
+          "column": "mot"
+        },
+        {
+          "table": "tlane_prod_mot",
+          "column": "mot"
+        }
+      ]
+    },
+    {
+      "id": "PRODSOURCE",
+      "kind": "TEXT",
+      "equality": "exact",
+      "prefix": "ps",
+      "members": [
+        {
+          "table": "comp_req_sp",
+          "column": "prodsource"
+        },
+        {
+          "table": "prod_cap_req_sp",
+          "column": "prodsource"
+        },
+        {
+          "table": "prodsource_sp",
+          "column": "prodsource"
+        }
+      ]
+    },
+    {
+      "id": "RESOURCE",
+      "kind": "TEXT",
+      "equality": "exact",
+      "prefix": "res",
+      "members": [
+        {
+          "table": "prod_cap_req_sp",
+          "column": "res"
+        },
+        {
+          "table": "res",
+          "column": "res"
+        },
+        {
+          "table": "res_attributes",
+          "column": "res"
+        },
+        {
+          "table": "rescapacity",
+          "column": "res"
+        }
+      ]
+    },
+    {
+      "id": "RESOURCE_GROUP",
+      "kind": "TEXT",
+      "equality": "exact",
+      "prefix": "rg",
+      "members": [
+        {
+          "table": "sku_attributes",
+          "column": "inb_hgroup"
+        },
+        {
+          "table": "sku_attributes",
+          "column": "inout_hgroup"
+        },
+        {
+          "table": "sku_attributes",
+          "column": "out_hgroup"
+        },
+        {
+          "table": "res_attributes",
+          "column": "resgroup"
+        },
+        {
+          "table": "sku_attributes",
+          "column": "storagegroup"
+        },
+        {
+          "table": "sku_attributes",
+          "column": "trgroup"
+        }
+      ]
+    },
+    {
+      "id": "UOM",
+      "kind": "TEXT",
+      "equality": "exact",
+      "prefix": "u",
+      "members": [
+        {
+          "table": "item",
+          "column": "baseuom"
+        },
+        {
+          "table": "res",
+          "column": "capuom"
+        },
+        {
+          "table": "prod_cap_req_sp",
+          "column": "fixcapacityrequom"
+        },
+        {
+          "table": "comp_req_sp",
+          "column": "fixcompconsuom"
+        },
+        {
+          "table": "prodsource_sp",
+          "column": "outputuom"
+        },
+        {
+          "table": "tlane_mot",
+          "column": "tlanemotlotsizeuom"
+        },
+        {
+          "table": "tlane_prod_mot",
+          "column": "tlaneprodmotuom"
+        },
+        {
+          "table": "tlane_mot",
+          "column": "transpcostuom"
+        },
+        {
+          "table": "stock_levels",
+          "column": "uom"
+        },
+        {
+          "table": "prod_cap_req_sp",
+          "column": "varcapacityrequom"
+        },
+        {
+          "table": "comp_req_sp",
+          "column": "varcompconsuom"
+        },
+        {
+          "table": "item",
+          "column": "volume_uom"
+        },
+        {
+          "table": "item",
+          "column": "weight_uom"
+        }
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "id": "context:DEMAND",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "sp_demand",
+            "columns": [
+              "item",
+              "loc",
+              "dmdstream",
+              "demandtype"
+            ]
+          },
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "item",
+              "loc",
+              "dmdstream",
+              "demandtype"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "sp_demand",
+            "columns": [
+              "item",
+              "loc",
+              "dmdstream",
+              "demandtype"
+            ]
+          },
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "item",
+              "loc",
+              "dmdstream",
+              "demandtype"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    },
+    {
+      "id": "context:LANE",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "tlane_mot",
+            "columns": [
+              "locfr",
+              "locto",
+              "mot"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "locfr",
+              "locto",
+              "mot"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "tlane_mot",
+            "columns": [
+              "locfr",
+              "locto",
+              "mot"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "locfr",
+              "locto",
+              "mot"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    },
+    {
+      "id": "context:PRODSOURCE",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "comp_req_sp",
+            "columns": [
+              "item",
+              "loc",
+              "prodsource"
+            ]
+          },
+          {
+            "table": "prod_cap_req_sp",
+            "columns": [
+              "item",
+              "loc",
+              "prodsource"
+            ]
+          },
+          {
+            "table": "prodsource_sp",
+            "columns": [
+              "item",
+              "loc",
+              "prodsource"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "comp_req_sp",
+            "columns": [
+              "item",
+              "loc",
+              "prodsource"
+            ]
+          },
+          {
+            "table": "prod_cap_req_sp",
+            "columns": [
+              "item",
+              "loc",
+              "prodsource"
+            ]
+          },
+          {
+            "table": "prodsource_sp",
+            "columns": [
+              "item",
+              "loc",
+              "prodsource"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    },
+    {
+      "id": "context:RESOURCE_LOC",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "prod_cap_req_sp",
+            "columns": [
+              "res",
+              "loc"
+            ]
+          },
+          {
+            "table": "res",
+            "columns": [
+              "res",
+              "loc"
+            ]
+          },
+          {
+            "table": "res_attributes",
+            "columns": [
+              "res",
+              "loc"
+            ]
+          },
+          {
+            "table": "rescapacity",
+            "columns": [
+              "res",
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "prod_cap_req_sp",
+            "columns": [
+              "res",
+              "loc"
+            ]
+          },
+          {
+            "table": "res",
+            "columns": [
+              "res",
+              "loc"
+            ]
+          },
+          {
+            "table": "res_attributes",
+            "columns": [
+              "res",
+              "loc"
+            ]
+          },
+          {
+            "table": "rescapacity",
+            "columns": [
+              "res",
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    },
+    {
+      "id": "context:SKU",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "comp_req_sp",
+            "columns": [
+              "comp",
+              "loc"
+            ]
+          },
+          {
+            "table": "comp_req_sp",
+            "columns": [
+              "item",
+              "loc"
+            ]
+          },
+          {
+            "table": "prod_cap_req_sp",
+            "columns": [
+              "item",
+              "loc"
+            ]
+          },
+          {
+            "table": "prodsource_sp",
+            "columns": [
+              "item",
+              "loc"
+            ]
+          },
+          {
+            "table": "sku_attributes",
+            "columns": [
+              "item",
+              "loc"
+            ]
+          },
+          {
+            "table": "sp_demand",
+            "columns": [
+              "item",
+              "loc"
+            ]
+          },
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "item",
+              "loc"
+            ]
+          },
+          {
+            "table": "stock_levels",
+            "columns": [
+              "item",
+              "loc"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "item",
+              "locfr"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "item",
+              "locto"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "comp_req_sp",
+            "columns": [
+              "comp",
+              "loc"
+            ]
+          },
+          {
+            "table": "comp_req_sp",
+            "columns": [
+              "item",
+              "loc"
+            ]
+          },
+          {
+            "table": "prod_cap_req_sp",
+            "columns": [
+              "item",
+              "loc"
+            ]
+          },
+          {
+            "table": "prodsource_sp",
+            "columns": [
+              "item",
+              "loc"
+            ]
+          },
+          {
+            "table": "sku_attributes",
+            "columns": [
+              "item",
+              "loc"
+            ]
+          },
+          {
+            "table": "sp_demand",
+            "columns": [
+              "item",
+              "loc"
+            ]
+          },
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "item",
+              "loc"
+            ]
+          },
+          {
+            "table": "stock_levels",
+            "columns": [
+              "item",
+              "loc"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "item",
+              "locfr"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "item",
+              "locto"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:comp_req_sp:comp",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "comp_req_sp",
+            "columns": [
+              "comp"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "item",
+            "columns": [
+              "item"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:comp_req_sp:item",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "comp_req_sp",
+            "columns": [
+              "item"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "item",
+            "columns": [
+              "item"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:comp_req_sp:loc",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "comp_req_sp",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "loc",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:demand_stream:dmdstream",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "demand_stream",
+            "columns": [
+              "dmdstream"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "demand_stream",
+            "columns": [
+              "dmdstream"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:prod_cap_req_sp:item",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "prod_cap_req_sp",
+            "columns": [
+              "item"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "item",
+            "columns": [
+              "item"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:prod_cap_req_sp:loc",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "prod_cap_req_sp",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "loc",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:prod_cap_req_sp:res",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "prod_cap_req_sp",
+            "columns": [
+              "res"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "res",
+            "columns": [
+              "res"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:prodsource_sp:item",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "prodsource_sp",
+            "columns": [
+              "item"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "item",
+            "columns": [
+              "item"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:prodsource_sp:loc",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "prodsource_sp",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "loc",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:res:loc",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "res",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "loc",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:res_attributes:loc",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "res_attributes",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "loc",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:res_attributes:res",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "res_attributes",
+            "columns": [
+              "res"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "res",
+            "columns": [
+              "res"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:rescapacity:loc",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "rescapacity",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "loc",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:rescapacity:res",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "rescapacity",
+            "columns": [
+              "res"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "res",
+            "columns": [
+              "res"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:sku_attributes:item",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "sku_attributes",
+            "columns": [
+              "item"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "item",
+            "columns": [
+              "item"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:sku_attributes:loc",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "sku_attributes",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "loc",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:sp_demand:dmdstream",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "sp_demand",
+            "columns": [
+              "dmdstream"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "demand_stream",
+            "columns": [
+              "dmdstream"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:sp_demand:item",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "sp_demand",
+            "columns": [
+              "item"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "item",
+            "columns": [
+              "item"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:sp_demand:loc",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "sp_demand",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "loc",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:sp_demand_profile:dmdstream",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "dmdstream"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "demand_stream",
+            "columns": [
+              "dmdstream"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:sp_demand_profile:item",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "item"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "item",
+            "columns": [
+              "item"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:sp_demand_profile:loc",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "loc",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:stock_levels:item",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "stock_levels",
+            "columns": [
+              "item"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "item",
+            "columns": [
+              "item"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:stock_levels:loc",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "stock_levels",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "loc",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:tlane_mot:locfr",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "tlane_mot",
+            "columns": [
+              "locfr"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "loc",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:tlane_mot:locto",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "tlane_mot",
+            "columns": [
+              "locto"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "loc",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:tlane_mot:mot",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "tlane_mot",
+            "columns": [
+              "mot"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "mot",
+            "columns": [
+              "mot"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:tlane_prod_mot:item",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "item"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "item",
+            "columns": [
+              "item"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:tlane_prod_mot:locfr",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "locfr"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "loc",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:tlane_prod_mot:locto",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "locto"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "loc",
+            "columns": [
+              "loc"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "fk:tlane_prod_mot:mot",
+      "kind": "fk",
+      "source": {
+        "members": [
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "mot"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "mot",
+            "columns": [
+              "mot"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "match_simple",
+      "predicate": "equality"
+    },
+    {
+      "id": "roles:CALENDAR",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "loc",
+            "columns": [
+              "arrivecal"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "arrivecal"
+            ]
+          },
+          {
+            "table": "res",
+            "columns": [
+              "calid_resequipnum"
+            ]
+          },
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "calld_consumption_config_id"
+            ]
+          },
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "calld_proration_config_id"
+            ]
+          },
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "consumption_config_id"
+            ]
+          },
+          {
+            "table": "loc",
+            "columns": [
+              "prodcal"
+            ]
+          },
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "proration_config_id"
+            ]
+          },
+          {
+            "table": "res",
+            "columns": [
+              "rescal"
+            ]
+          },
+          {
+            "table": "loc",
+            "columns": [
+              "shipcal"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "shipcal"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "tlanecal"
+            ]
+          },
+          {
+            "table": "tlane_mot",
+            "columns": [
+              "tlanemotcal"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "loc",
+            "columns": [
+              "arrivecal"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "arrivecal"
+            ]
+          },
+          {
+            "table": "res",
+            "columns": [
+              "calid_resequipnum"
+            ]
+          },
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "calld_consumption_config_id"
+            ]
+          },
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "calld_proration_config_id"
+            ]
+          },
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "consumption_config_id"
+            ]
+          },
+          {
+            "table": "loc",
+            "columns": [
+              "prodcal"
+            ]
+          },
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "proration_config_id"
+            ]
+          },
+          {
+            "table": "res",
+            "columns": [
+              "rescal"
+            ]
+          },
+          {
+            "table": "loc",
+            "columns": [
+              "shipcal"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "shipcal"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "tlanecal"
+            ]
+          },
+          {
+            "table": "tlane_mot",
+            "columns": [
+              "tlanemotcal"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    },
+    {
+      "id": "roles:DEMAND_STREAM",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "demand_stream",
+            "columns": [
+              "dmdstream"
+            ]
+          },
+          {
+            "table": "sp_demand",
+            "columns": [
+              "dmdstream"
+            ]
+          },
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "dmdstream"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "demand_stream",
+            "columns": [
+              "dmdstream"
+            ]
+          },
+          {
+            "table": "sp_demand",
+            "columns": [
+              "dmdstream"
+            ]
+          },
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "dmdstream"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    },
+    {
+      "id": "roles:DEMAND_TYPE",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "sp_demand",
+            "columns": [
+              "demandtype"
+            ]
+          },
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "demandtype"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "sp_demand",
+            "columns": [
+              "demandtype"
+            ]
+          },
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "demandtype"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    },
+    {
+      "id": "roles:ITEM",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "comp_req_sp",
+            "columns": [
+              "comp"
+            ]
+          },
+          {
+            "table": "comp_req_sp",
+            "columns": [
+              "item"
+            ]
+          },
+          {
+            "table": "item",
+            "columns": [
+              "item"
+            ]
+          },
+          {
+            "table": "prod_cap_req_sp",
+            "columns": [
+              "item"
+            ]
+          },
+          {
+            "table": "prodsource_sp",
+            "columns": [
+              "item"
+            ]
+          },
+          {
+            "table": "sku_attributes",
+            "columns": [
+              "item"
+            ]
+          },
+          {
+            "table": "sp_demand",
+            "columns": [
+              "item"
+            ]
+          },
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "item"
+            ]
+          },
+          {
+            "table": "stock_levels",
+            "columns": [
+              "item"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "item"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "comp_req_sp",
+            "columns": [
+              "comp"
+            ]
+          },
+          {
+            "table": "comp_req_sp",
+            "columns": [
+              "item"
+            ]
+          },
+          {
+            "table": "item",
+            "columns": [
+              "item"
+            ]
+          },
+          {
+            "table": "prod_cap_req_sp",
+            "columns": [
+              "item"
+            ]
+          },
+          {
+            "table": "prodsource_sp",
+            "columns": [
+              "item"
+            ]
+          },
+          {
+            "table": "sku_attributes",
+            "columns": [
+              "item"
+            ]
+          },
+          {
+            "table": "sp_demand",
+            "columns": [
+              "item"
+            ]
+          },
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "item"
+            ]
+          },
+          {
+            "table": "stock_levels",
+            "columns": [
+              "item"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "item"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    },
+    {
+      "id": "roles:LOCATION",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "comp_req_sp",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "loc",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "prod_cap_req_sp",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "prodsource_sp",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "res",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "res_attributes",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "rescapacity",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "sku_attributes",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "sp_demand",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "stock_levels",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "tlane_mot",
+            "columns": [
+              "locfr"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "locfr"
+            ]
+          },
+          {
+            "table": "tlane_mot",
+            "columns": [
+              "locto"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "locto"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "comp_req_sp",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "loc",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "prod_cap_req_sp",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "prodsource_sp",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "res",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "res_attributes",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "rescapacity",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "sku_attributes",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "sp_demand",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "sp_demand_profile",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "stock_levels",
+            "columns": [
+              "loc"
+            ]
+          },
+          {
+            "table": "tlane_mot",
+            "columns": [
+              "locfr"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "locfr"
+            ]
+          },
+          {
+            "table": "tlane_mot",
+            "columns": [
+              "locto"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "locto"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    },
+    {
+      "id": "roles:MOT",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "mot",
+            "columns": [
+              "mot"
+            ]
+          },
+          {
+            "table": "tlane_mot",
+            "columns": [
+              "mot"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "mot"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "mot",
+            "columns": [
+              "mot"
+            ]
+          },
+          {
+            "table": "tlane_mot",
+            "columns": [
+              "mot"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "mot"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    },
+    {
+      "id": "roles:PRODSOURCE",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "comp_req_sp",
+            "columns": [
+              "prodsource"
+            ]
+          },
+          {
+            "table": "prod_cap_req_sp",
+            "columns": [
+              "prodsource"
+            ]
+          },
+          {
+            "table": "prodsource_sp",
+            "columns": [
+              "prodsource"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "comp_req_sp",
+            "columns": [
+              "prodsource"
+            ]
+          },
+          {
+            "table": "prod_cap_req_sp",
+            "columns": [
+              "prodsource"
+            ]
+          },
+          {
+            "table": "prodsource_sp",
+            "columns": [
+              "prodsource"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    },
+    {
+      "id": "roles:RESOURCE",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "prod_cap_req_sp",
+            "columns": [
+              "res"
+            ]
+          },
+          {
+            "table": "res",
+            "columns": [
+              "res"
+            ]
+          },
+          {
+            "table": "res_attributes",
+            "columns": [
+              "res"
+            ]
+          },
+          {
+            "table": "rescapacity",
+            "columns": [
+              "res"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "prod_cap_req_sp",
+            "columns": [
+              "res"
+            ]
+          },
+          {
+            "table": "res",
+            "columns": [
+              "res"
+            ]
+          },
+          {
+            "table": "res_attributes",
+            "columns": [
+              "res"
+            ]
+          },
+          {
+            "table": "rescapacity",
+            "columns": [
+              "res"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    },
+    {
+      "id": "roles:RESOURCE_GROUP",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "sku_attributes",
+            "columns": [
+              "inb_hgroup"
+            ]
+          },
+          {
+            "table": "sku_attributes",
+            "columns": [
+              "inout_hgroup"
+            ]
+          },
+          {
+            "table": "sku_attributes",
+            "columns": [
+              "out_hgroup"
+            ]
+          },
+          {
+            "table": "res_attributes",
+            "columns": [
+              "resgroup"
+            ]
+          },
+          {
+            "table": "sku_attributes",
+            "columns": [
+              "storagegroup"
+            ]
+          },
+          {
+            "table": "sku_attributes",
+            "columns": [
+              "trgroup"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "sku_attributes",
+            "columns": [
+              "inb_hgroup"
+            ]
+          },
+          {
+            "table": "sku_attributes",
+            "columns": [
+              "inout_hgroup"
+            ]
+          },
+          {
+            "table": "sku_attributes",
+            "columns": [
+              "out_hgroup"
+            ]
+          },
+          {
+            "table": "res_attributes",
+            "columns": [
+              "resgroup"
+            ]
+          },
+          {
+            "table": "sku_attributes",
+            "columns": [
+              "storagegroup"
+            ]
+          },
+          {
+            "table": "sku_attributes",
+            "columns": [
+              "trgroup"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    },
+    {
+      "id": "roles:UOM",
+      "kind": "join",
+      "source": {
+        "members": [
+          {
+            "table": "item",
+            "columns": [
+              "baseuom"
+            ]
+          },
+          {
+            "table": "res",
+            "columns": [
+              "capuom"
+            ]
+          },
+          {
+            "table": "prod_cap_req_sp",
+            "columns": [
+              "fixcapacityrequom"
+            ]
+          },
+          {
+            "table": "comp_req_sp",
+            "columns": [
+              "fixcompconsuom"
+            ]
+          },
+          {
+            "table": "prodsource_sp",
+            "columns": [
+              "outputuom"
+            ]
+          },
+          {
+            "table": "tlane_mot",
+            "columns": [
+              "tlanemotlotsizeuom"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "tlaneprodmotuom"
+            ]
+          },
+          {
+            "table": "tlane_mot",
+            "columns": [
+              "transpcostuom"
+            ]
+          },
+          {
+            "table": "stock_levels",
+            "columns": [
+              "uom"
+            ]
+          },
+          {
+            "table": "prod_cap_req_sp",
+            "columns": [
+              "varcapacityrequom"
+            ]
+          },
+          {
+            "table": "comp_req_sp",
+            "columns": [
+              "varcompconsuom"
+            ]
+          },
+          {
+            "table": "item",
+            "columns": [
+              "volume_uom"
+            ]
+          },
+          {
+            "table": "item",
+            "columns": [
+              "weight_uom"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "target": {
+        "members": [
+          {
+            "table": "item",
+            "columns": [
+              "baseuom"
+            ]
+          },
+          {
+            "table": "res",
+            "columns": [
+              "capuom"
+            ]
+          },
+          {
+            "table": "prod_cap_req_sp",
+            "columns": [
+              "fixcapacityrequom"
+            ]
+          },
+          {
+            "table": "comp_req_sp",
+            "columns": [
+              "fixcompconsuom"
+            ]
+          },
+          {
+            "table": "prodsource_sp",
+            "columns": [
+              "outputuom"
+            ]
+          },
+          {
+            "table": "tlane_mot",
+            "columns": [
+              "tlanemotlotsizeuom"
+            ]
+          },
+          {
+            "table": "tlane_prod_mot",
+            "columns": [
+              "tlaneprodmotuom"
+            ]
+          },
+          {
+            "table": "tlane_mot",
+            "columns": [
+              "transpcostuom"
+            ]
+          },
+          {
+            "table": "stock_levels",
+            "columns": [
+              "uom"
+            ]
+          },
+          {
+            "table": "prod_cap_req_sp",
+            "columns": [
+              "varcapacityrequom"
+            ]
+          },
+          {
+            "table": "comp_req_sp",
+            "columns": [
+              "varcompconsuom"
+            ]
+          },
+          {
+            "table": "item",
+            "columns": [
+              "volume_uom"
+            ]
+          },
+          {
+            "table": "item",
+            "columns": [
+              "weight_uom"
+            ]
+          }
+        ],
+        "projection": "bag"
+      },
+      "nulls": "sql",
+      "predicate": "equality"
+    }
+  ],
+  "keys": [
+    {
+      "id": "bk:comp_req_sp",
+      "table": "comp_req_sp",
+      "columns": [
+        "item",
+        "loc",
+        "prodsource",
+        "comp"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    },
+    {
+      "id": "bk:demand_stream",
+      "table": "demand_stream",
+      "columns": [
+        "dmdstream"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    },
+    {
+      "id": "bk:item",
+      "table": "item",
+      "columns": [
+        "item"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    },
+    {
+      "id": "bk:loc",
+      "table": "loc",
+      "columns": [
+        "loc"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    },
+    {
+      "id": "bk:mot",
+      "table": "mot",
+      "columns": [
+        "mot"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    },
+    {
+      "id": "bk:prod_cap_req_sp",
+      "table": "prod_cap_req_sp",
+      "columns": [
+        "item",
+        "loc",
+        "prodsource",
+        "res",
+        "date",
+        "periodid"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    },
+    {
+      "id": "bk:prodsource_sp",
+      "table": "prodsource_sp",
+      "columns": [
+        "item",
+        "loc",
+        "prodsource"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    },
+    {
+      "id": "bk:res",
+      "table": "res",
+      "columns": [
+        "res",
+        "loc"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    },
+    {
+      "id": "bk:res_attributes",
+      "table": "res_attributes",
+      "columns": [
+        "res",
+        "loc"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    },
+    {
+      "id": "bk:rescapacity",
+      "table": "rescapacity",
+      "columns": [
+        "res",
+        "loc",
+        "periodid"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    },
+    {
+      "id": "bk:sku_attributes",
+      "table": "sku_attributes",
+      "columns": [
+        "item",
+        "loc"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    },
+    {
+      "id": "bk:sp_demand",
+      "table": "sp_demand",
+      "columns": [
+        "item",
+        "loc",
+        "dmdstream",
+        "demandtype",
+        "periodid"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    },
+    {
+      "id": "bk:sp_demand_profile",
+      "table": "sp_demand_profile",
+      "columns": [
+        "item",
+        "loc",
+        "dmdstream",
+        "demandtype"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    },
+    {
+      "id": "bk:stock_levels",
+      "table": "stock_levels",
+      "columns": [
+        "item",
+        "loc",
+        "periodid"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    },
+    {
+      "id": "bk:tlane_mot",
+      "table": "tlane_mot",
+      "columns": [
+        "locfr",
+        "locto",
+        "mot"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    },
+    {
+      "id": "bk:tlane_prod_mot",
+      "table": "tlane_prod_mot",
+      "columns": [
+        "item",
+        "locfr",
+        "locto",
+        "mot",
+        "validfr",
+        "validto"
+      ],
+      "kind": "bk",
+      "nulls": "not_distinct"
+    }
+  ],
+  "required_checks": [
+    "bk:comp_req_sp",
+    "bk:demand_stream",
+    "bk:item",
+    "bk:loc",
+    "bk:mot",
+    "bk:prod_cap_req_sp",
+    "bk:prodsource_sp",
+    "bk:res",
+    "bk:res_attributes",
+    "bk:rescapacity",
+    "bk:sku_attributes",
+    "bk:sp_demand",
+    "bk:sp_demand_profile",
+    "bk:stock_levels",
+    "bk:tlane_mot",
+    "bk:tlane_prod_mot",
+    "context:DEMAND",
+    "context:LANE",
+    "context:PRODSOURCE",
+    "context:RESOURCE_LOC",
+    "context:SKU",
+    "domain:DEMAND_STREAM",
+    "domain:DEMAND_TYPE",
+    "domain:ITEM",
+    "domain:LOCATION",
+    "domain:MOT",
+    "domain:PRODSOURCE",
+    "domain:RESOURCE",
+    "fk:comp_req_sp:comp",
+    "fk:comp_req_sp:item",
+    "fk:comp_req_sp:loc",
+    "fk:demand_stream:dmdstream",
+    "fk:prod_cap_req_sp:item",
+    "fk:prod_cap_req_sp:loc",
+    "fk:prod_cap_req_sp:res",
+    "fk:prodsource_sp:item",
+    "fk:prodsource_sp:loc",
+    "fk:res:loc",
+    "fk:res_attributes:loc",
+    "fk:res_attributes:res",
+    "fk:rescapacity:loc",
+    "fk:rescapacity:res",
+    "fk:sku_attributes:item",
+    "fk:sku_attributes:loc",
+    "fk:sp_demand:dmdstream",
+    "fk:sp_demand:item",
+    "fk:sp_demand:loc",
+    "fk:sp_demand_profile:dmdstream",
+    "fk:sp_demand_profile:item",
+    "fk:sp_demand_profile:loc",
+    "fk:stock_levels:item",
+    "fk:stock_levels:loc",
+    "fk:tlane_mot:locfr",
+    "fk:tlane_mot:locto",
+    "fk:tlane_mot:mot",
+    "fk:tlane_prod_mot:item",
+    "fk:tlane_prod_mot:locfr",
+    "fk:tlane_prod_mot:locto",
+    "fk:tlane_prod_mot:mot",
+    "roles:DEMAND_STREAM",
+    "roles:DEMAND_TYPE",
+    "roles:ITEM",
+    "roles:LOCATION",
+    "roles:MOT",
+    "roles:PRODSOURCE",
+    "roles:RESOURCE"
+  ],
+  "missing_target_policy": "not_checked"
+}

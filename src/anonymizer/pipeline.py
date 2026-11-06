@@ -14,7 +14,7 @@ from threading import Event
 from . import __version__
 from .tabular_reader import parse_tabular
 from .errors import AnonymizerError, Cancelled, PgCommitUncertain, IntegrityError
-from .connectivity import ContractError, compile_contract, load_profile, MAX_PROFILE_BYTES
+from .connectivity import ContractError, compile_contract, input_text_hints, load_profile, MAX_PROFILE_BYTES
 from .integrity import IntegrityVerifier
 from .integrity_publication import failure_report, publish_diagnostic, profile_fields
 from .exporters import Exporter
@@ -126,7 +126,9 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
         stage["current"] = "connectivity"
         profile = load_profile(options.connectivity_profile)
         stage["current"] = "import"
-        with tempfile.TemporaryDirectory(prefix="snp-anonymizer-") as temp, Store(Path(temp) / "spool.sqlite", model, bypass_model=options.bypass_model) as store:
+        with tempfile.TemporaryDirectory(prefix="snp-anonymizer-") as temp, Store(
+                Path(temp) / "spool.sqlite", model, bypass_model=options.bypass_model,
+                input_text_hints=input_text_hints(profile) if options.bypass_model else ()) as store:
             data_source = source
             if source.suffix.lower() == ".zip":
                 progress("import", 0, "Распаковка архива")

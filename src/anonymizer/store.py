@@ -5,14 +5,19 @@ import re
 import sqlite3
 
 from .errors import AnonymizerError
-from .generic_input import InputInference, InputLimitError
+from .generic_input import InputInference, InputLimitError, inferred_type, normalize_decimal_comma
 from .metadata import SYSTEM, physical_type, sql_type, system_field
 
 MAX_INPUT_METADATA = 16 * 1024**2
 
 
 class Store:
-    def __init__(self, path, model, bypass_model=False):
+    def __init__(self, path, model, bypass_model=False, input_text_hints=()):
+        self._input_text_hints = frozenset(input_text_hints)
+        hint_bytes = sum(128 + sum(len(part.encode("utf-8")) * 4 for part in hint)
+                         for hint in self._input_text_hints)
+        if hint_bytes > MAX_INPUT_METADATA:
+            raise InputLimitError("Превышен общий лимит подсказок типов профиля.")
         self.db = sqlite3.connect(path)
         self.db.execute("PRAGMA journal_mode=OFF")
         self.db.execute("PRAGMA cache_size=-16384")
@@ -23,7 +28,7 @@ class Store:
         self.model, self.tables, self.skipped = model, {}, {}
         self.bypass_model = bypass_model
         self._input_inference = {}
-        self._input_metadata_used, self._input_metadata_costs = 0, {}
+        self._input_metadata_used, self._input_metadata_costs = hint_bytes, {}
         # A private, bounded declaration registry survives normalisation and
         # table skipping. It contains schema only, never input row values.
         self.declarations, self._declaration_costs, self._declaration_bytes = {}, {}, 0
@@ -219,14 +224,33 @@ class Store:
         """Define only the submitted header; never add fields from the snapshot."""
         if not self.bypass_model:
             raise AnonymizerError("Режим обхода эталона не включён.")
-        state = InputInference(name[1], columns)
+        state = InputInference(name[1], columns, text_columns=(col for table, col in self._input_text_hints
+                                                             if table == name[1]))
         self.define(name, state.fields())
         if name in self.tables:
             self._input_inference[name] = state
 
+    def input_text_column(self, name, index):
+        """Zero-based physical header index; no per-row hint expansion."""
+        state = self._input_inference.get(name)
+        return state is not None and index in state.text_codes
+
     def observe_input(self, name, row_values, native_types=None):
         state = self._input_inference.get(name)
         if state is not None:
+            # Infer external comma decimals before storing them, so every
+            # downstream numeric comparator/exporter receives the same exact
+            # dot spelling. Do not reinterpret other native XLSX text codes.
+            for index, (column, value) in enumerate(zip(state.columns, row_values)):
+                if column in SYSTEM or index in state.text_codes or value is None or "," not in value:
+                    continue
+                normalized = normalize_decimal_comma(value)
+                if normalized != value and inferred_type(normalized) == "NUMBER":
+                    if native_types is not None and native_types[index] not in {None, "TEXT", "NUMBER"}:
+                        continue
+                    row_values[index] = normalized
+                    if native_types is not None:
+                        native_types[index] = "NUMBER"
             state.observe(row_values, native_types)
 
     def finish_input(self, name, check=lambda: None):
