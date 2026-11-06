@@ -32,7 +32,7 @@ def main(argv=None):
     parser.add_argument("--skip-error-tables", action="store_true", help="Пропускать таблицы с ошибками вместо остановки обработки")
     parser.add_argument("--bypass-model", action="store_true", help="Обходить эталон: без профиля тексты заменяются независимо, числа/даты сохраняются; профиль связности применяется отдельно")
     parser.add_argument("--connectivity-profile", default=None, metavar="builtin:snp-v1|builtin:optimizer-v2|PATH", help="Встроенный SNP v1, Optimizer v2 или путь к JSON-профилю связности")
-    parser.add_argument("--require-integrity", action="store_true", help="Выдавать датасет только при полном PASS обязательных проверок связности")
+    parser.add_argument("--require-integrity", action="store_true", help="Требовать проверку доступных связей: отсутствие таблиц/колонок не блокирует выдачу, кроме явной политики профиля block; неподдерживаемые обязательные проверки блокируют")
     parser.add_argument("--smoke-gui", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--smoke-gui-report", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)

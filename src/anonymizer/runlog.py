@@ -40,6 +40,16 @@ class RunLog:
                      f"дубликатов: {group['extra_rows_before']} -> {group['extra_rows_after']} "
                      f"({group['kind']}, nulls {group['nulls']})")
 
+    def add_integrity_checks(self, result):
+        """Readable explanations with no source row values or private schemas."""
+        for item in result.get("checks", ()):
+            status = item.get("status", "NOT_CHECKED")
+            self.add("error" if status == "FAIL" else "check" if status == "PASS" and not item.get("source_defects") else "warning",
+                     "verify_exports", "integrity_check", item.get("title", item["id"]),
+                     item.get("message", status))
+        self.add("info", "verify_exports", "integrity_summary", "Связность переданных таблиц",
+                 result.get("integrity_message", "Проверки завершены; подробности в report.json."))
+
     def write_csv(self, path) -> int:
         """UTF-8 with BOM and ';' so RU Excel opens it by double-click."""
         safe = [tuple(self._formula_safe(cell) for cell in row) for row in self.entries]

@@ -205,7 +205,7 @@ class Application:
         self.profile_file_button = ttk.Button(self.profile_file_frame, text="Файл…", command=self.pick_connectivity_profile)
         self.profile_file_button.grid(row=0, column=1, padx=(self.px(ds.SPACE_S), 0))
         self.controls.extend([self.profile_file_entry, self.profile_file_button])
-        require_check = self.wrap_check(card, text="Требовать проверенную связность", variable=self.require_integrity)
+        require_check = self.wrap_check(card, text="Требовать проверку доступных связей", variable=self.require_integrity)
         require_check.grid(row=11, column=0, columnspan=2, sticky="ew", pady=(self.px(ds.SPACE_S), 0))
         self.require_integrity_check = require_check.control
         self.controls.append(require_check.control)
@@ -593,14 +593,20 @@ class Application:
                     missing = sum(f.get("status") == "target_not_in_input" or f.get("missing_after", 0) > 0 for f in data["validation"]["foreign_keys"])
                     loaded = f" В PostgreSQL загружено строк: {data['pg_load']['rows']:,} (схема {data['pg_load']['schema']})." if "pg_load" in data else ""
                     integrity = data.get("integrity_status")
+                    coverage = data.get("coverage") or {}
+                    checked, skipped, declared = (coverage.get(key) for key in ("checked", "skipped", "declared"))
+                    has_counts = all(isinstance(value, int) and value >= 0 for value in (checked, skipped, declared))
                     if integrity == "PASSED":
                         scope = "Обязательные проверки связности пройдены."
                     elif integrity == "NOT_CHECKED":
-                        scope = "Связность не подтверждена: проверьте охват и ограничения в отчёте."
+                        scope = ("Набор опубликован. Связность проверена частично."
+                                 if has_counts and checked else "Набор опубликован. Связность не подтверждена.")
                     else:
                         scope = "Проверки завершены; точный охват указан в отчёте."
+                    if has_counts:
+                        scope += f" Проверено: {checked} из {declared}; пропущено: {skipped}."
                     source_warning = " Есть исходные дефекты данных." if data.get("source_integrity_status") == "WARNINGS" else ""
-                    self.result.set(f"{scope}{source_warning} Предупреждений по ссылкам: {missing}.{loaded} Отчёт — report.json.")
+                    self.result.set(f"{scope}{source_warning} Предупреждений по ссылкам: {missing}.{loaded} Причины пропусков — в report.json и журнале CSV.")
                     self.open_button.configure(state="normal")
                 elif kind == "uncertain":
                     self.status.set("Результат COMMIT PostgreSQL не подтверждён")

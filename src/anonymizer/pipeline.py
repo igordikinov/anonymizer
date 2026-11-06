@@ -16,6 +16,7 @@ from .tabular_reader import parse_tabular
 from .errors import AnonymizerError, Cancelled, PgCommitUncertain, IntegrityError
 from .connectivity import ContractError, compile_contract, input_text_hints, load_profile, MAX_PROFILE_BYTES
 from .integrity import IntegrityVerifier
+from .integrity_diagnostics import MISSING_REASONS, missing_only_coverage
 from .integrity_publication import failure_report, publish_diagnostic, profile_fields
 from .exporters import Exporter
 from .mapping import Project, Transformer
@@ -107,7 +108,7 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
         if cancel and cancel.is_set():
             raise Cancelled("Обработка отменена. Итоговый пакет не создан.")
 
-    def refuse_integrity(code, result=None):
+    def refuse_integrity(code, result=None, *, error_message=None):
         nonlocal published
         # A late cancellation may happen after our own directory rename but
         # before PG COMMIT. Remove that unpublished dataset from its public
@@ -115,7 +116,8 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
         if published and not retain_output:
             output.rename(staging)
             published = False
-        diagnostic = failure_report(code, contract, result, bypass_model=options.bypass_model)
+        diagnostic = failure_report(code, contract, result, bypass_model=options.bypass_model,
+                                    error_message=error_message)
         try:
             report_path = publish_diagnostic(output, diagnostic)
         except OSError:
@@ -251,22 +253,27 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
             exporter = None
             progress("verify_exports", 0, "Повторное чтение CSV, COPY и INSERT; проверка связности")
             integrity_result = integrity.verify(staging, schema_names)
-            for item in integrity_result.get("checks", ()):
-                status = item.get("status", "NOT_CHECKED")
-                log.add("error" if status == "FAIL" else "check" if status == "PASS" else "warning",
-                        "verify_exports", "integrity_check", item["id"],
-                        f"{status}; lost={item.get('lost', 0)}, added={item.get('added', 0)}")
+            log.add_integrity_checks(integrity_result)
             if (integrity_result["integrity_status"] == "FAILED"
                     or any(item.get("status") == "FAIL" for item in integrity_result.get("checks", ()))):
                 codes = {"DOMAIN_MAPPING_CONFLICT", "KEY_GROUP_CHANGED", "RELATION_CHANGED"}
                 failure_code = next((item.get("reason") for item in integrity_result.get("checks", ())
                                      if item.get("status") == "FAIL" and item.get("reason") in codes), "RELATION_CHANGED")
                 refuse_integrity(integrity_result.get("error_code", failure_code), integrity_result)
-            if options.require_integrity and integrity_result["integrity_status"] != "PASSED":
+            if (options.require_integrity and integrity_result["integrity_status"] != "PASSED"
+                    and not missing_only_coverage(integrity_result, contract)):
                 unsupported = any(item.get("required") and (item.get("status") == "UNSUPPORTED"
                                   or item.get("reason") in {"SYSTEM_FIELD_POLICY", "SYSTEM_FIELD_EXCLUDED"})
                                   for item in integrity_result.get("checks", ()))
                 refuse_integrity("CHECK_UNSUPPORTED" if unsupported else "RELATION_TARGET_MISSING", integrity_result)
+            if integrity_result["integrity_status"] != "PASSED":
+                if profile is not None and any(c.get("reason") in MISSING_REASONS for c in integrity_result["checks"]):
+                    detail = ("Отсутствующие таблицы и колонки не блокируют выдачу. Общие замены переданных полей сохранены; "
+                              "полная связность не подтверждена. Подробности — у пропущенных проверок.")
+                else:
+                    detail = ("Выдача допускается с непроверенной связностью. Профильные связи проверяются только в объявленном "
+                              "и поддерживаемом охвате; подробные ограничения указаны в отчёте.")
+                log.add("warning", "verify_exports", "partial_coverage_allowed", "Неполная проверка", detail)
             progress("validate", 0, "Проверка связей, ключей и сохраняемых полей")
             id_to_name = {data["id"]: f"{schema_names[name[0]]}.{name[1]}" for name, data in store.tables.items()}
             validations = validator.finish()
@@ -387,8 +394,8 @@ def run(options: Options, progress=lambda stage, amount, message: None, cancel: 
         log.add("error", "verify_exports", "integrity_refused", "", str(error))
         raise
     except ContractError as error:
-        log.add("error", "connectivity", "contract_refused", "", error.code)
-        refuse_integrity(error.code)
+        log.add("error", "connectivity", "contract_refused", "Профиль и карта замен", str(error))
+        refuse_integrity(error.code, error_message=error.detail)
     except InputLimitError:
         if options.connectivity_profile or options.require_integrity or stage["current"] == "verify_exports":
             refuse_integrity("CHECK_INCOMPLETE", integrity_result)

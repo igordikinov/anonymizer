@@ -10,7 +10,9 @@ class IntegrityError(AnonymizerError):
     """A failed integrity gate with an explicitly published diagnostics file."""
 
     def __init__(self, code, report_path, report):
-        super().__init__(f"{code}: набор данных не опубликован; создан диагностический отчёт.")
+        detail = report.get("error_message")
+        message = f"{code}: " + (detail + " " if detail else "")
+        super().__init__(message + "Набор данных не опубликован; создан диагностический отчёт.")
         self.code, self.report_path, self.report = code, report_path, report
 
 

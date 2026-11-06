@@ -56,6 +56,9 @@ def test_cli_help_lists_separate_snp_and_optimizer_profiles(capsys):
     assert result.value.code == 0
     help_text = capsys.readouterr().out
     assert "builtin:snp-v1" in help_text and "builtin:optimizer-v2" in help_text
+    assert "доступных связей" in help_text
+    assert "block" in help_text
+    assert "полном PASS" not in help_text
 
 
 def app_surface(tk_root):
@@ -72,6 +75,8 @@ def test_gui_profile_selection_requires_integrity_but_allows_explicit_unverified
     assert app.connectivity_options() is None and not app.require_integrity.get()
     assert app.profile_file_entry.instate(["disabled"])
     assert "SNP v1" in app.connectivity_selector.cget("values")
+    assert any(child.winfo_class() == "TLabel" and child.cget("text") == "Требовать проверку доступных связей"
+               for child in app.require_integrity_check.master.winfo_children())
     app.connectivity_choice.set(choice)
     app.connectivity_selected()
     assert app.connectivity_options() == profile and app.require_integrity.get()
@@ -152,6 +157,34 @@ def test_gui_unverified_success_and_diagnostic_failure_are_not_reported_as_pass(
     assert "набор данных не опубликован" in app.status.get()
     assert app.open_button.instate(["!disabled"])
     assert messages and "CHECK_INCOMPLETE" in messages[0][1]
+
+
+@pytest.mark.parametrize("checked,skipped,declared", [(21, 51, 72), (0, 72, 72)])
+def test_gui_partial_publication_shows_coverage_without_claiming_full_pass(tk_root, checked, skipped, declared):
+    app = app_surface(tk_root)
+    result = report(status="NOT_CHECKED")
+    result["dataset_published"] = True
+    result["coverage"] = {"checked": checked, "skipped": skipped, "declared": declared}
+    result["integrity_message"] = "SYN_LONG_DETAIL " * 10000
+    app.events.put(("done", result))
+    app._poll_once()
+    text = app.result.get()
+    assert "Набор опубликован" in text
+    assert f"Проверено: {checked} из {declared}; пропущено: {skipped}" in text
+    assert "Причины пропусков" in text and "журнале CSV" in text
+    assert "Обязательные проверки связности пройдены" not in text
+    assert ("проверена частично" in text) is bool(checked)
+    assert "SYN_LONG_DETAIL" not in text and len(text) < 500
+
+
+def test_gui_optional_skips_keep_required_pass_but_show_coverage(tk_root):
+    app = app_surface(tk_root)
+    result = report()
+    result["coverage"] = {"checked": 66, "skipped": 6, "declared": 72}
+    app.events.put(("done", result))
+    app._poll_once()
+    assert "Обязательные проверки связности пройдены" in app.result.get()
+    assert "Проверено: 66 из 72; пропущено: 6" in app.result.get()
 
 
 def test_gui_empty_json_path_blocks_launch(tk_root, monkeypatch):

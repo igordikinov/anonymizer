@@ -252,13 +252,8 @@ def test_missing_profile_field_has_honest_partial_coverage(tmp_path, require):
     p = profile(domains=[domain([("nodes", "code"), ("missing", "code")])], required=["domain:OBJECT"])
     output = tmp_path / "out"
     options = Options(source, output, tmp_path / "private.snpanon", bypass_model=True, delimiter=",", connectivity_profile=p, require_integrity=require)
-    if require:
-        with pytest.raises(IntegrityError) as error:
-            run(options)
-        report = assert_diagnostic_only(output, error.value)
-    else:
-        report = run(options)
-        assert report["publication_mode"] == "UNVERIFIED_INTEGRITY"
+    report = run(options)
+    assert report["dataset_published"] and report["publication_mode"] == "UNVERIFIED_INTEGRITY"
     assert report["integrity_status"] == "NOT_CHECKED"
     assert check(report, "domain:OBJECT")["status"] == "NOT_CHECKED"
 
@@ -440,9 +435,8 @@ def test_missing_target_differs_from_present_empty_target(tmp_path, target_exist
         assert report["integrity_status"] == "PASSED" and report["source_integrity_status"] == "WARNINGS"
         assert relation["status"] == "PASS" and relation["unmatched_before"] == relation["unmatched_after"] == 1
     else:
-        with pytest.raises(IntegrityError) as error:
-            run(options)
-        report = assert_diagnostic_only(output, error.value)
+        report = run(options)
+        assert report["dataset_published"] and report["publication_mode"] == "UNVERIFIED_INTEGRITY"
         assert check(report, "parent")["status"] == "NOT_CHECKED"
 
 

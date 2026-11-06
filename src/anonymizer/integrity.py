@@ -7,7 +7,8 @@ import sqlite3
 from contextlib import contextmanager
 
 from . import canonical
-from .connectivity import domain_value
+from .connectivity import _state, domain_value
+from .integrity_diagnostics import enrich_results, summary_message
 from .errors import AnonymizerError, Cancelled
 from .export_readback import read_csv_output, read_sql_output, MAX_RECORD
 from .metadata import SYSTEM
@@ -31,6 +32,9 @@ def _check_result(descriptor, kind):
         status = "NOT_CHECKED"
     result = {"id": descriptor["id"], "kind": kind, "status": status,
               "required": bool(descriptor.get("required", False))}
+    for key in ("title", "missing"):
+        if key in descriptor:
+            result[key] = descriptor[key]
     if status != "PENDING":
         result["reason"] = _reason(descriptor.get("reason"), "CHECK_UNSUPPORTED" if status == "UNSUPPORTED" else "CHECK_NOT_APPLICABLE")
     return result
@@ -327,6 +331,11 @@ class IntegrityVerifier:
         partial = result["status"] == "NOT_CHECKED" and result.get("reason") in {"RELATION_TARGET_MISSING", "COLUMN_MISSING", "PHYSICAL_COLUMN_MISSING"}
         if result["status"] != "PENDING" and not partial:
             return result
+        if any(SYSTEM.intersection(member["columns"])
+               for side in ("source", "target")
+               for member in descriptor.get(side, {}).get("members", ())):
+            result.update(status="NOT_CHECKED", reason="SYSTEM_FIELD_POLICY")
+            return result
         sides = {}
         for side in ("source", "target"):
             original = descriptor.get(side, {})
@@ -336,6 +345,12 @@ class IntegrityVerifier:
                 return result
             partial |= len(members) != len(original.get("members", []))
             sides[side] = {**original, "members": members}
+        # An absent member can have hidden an unsupported comparison in the
+        # compiler's original state. Validate the actual available projection.
+        status, reason = _state(self.store, [sides["source"], sides["target"]])
+        if status != "PENDING":
+            result.update(status=status, reason=reason)
+            return result
         self.db.execute("DROP TABLE IF EXISTS integrity_relation")
         self.db.execute("CREATE TEMP TABLE integrity_relation(side INTEGER NOT NULL,member TEXT NOT NULL,old TEXT,new TEXT,PRIMARY KEY(side,member)) WITHOUT ROWID")
         self._side(0, sides["source"], descriptor.get("nulls", "sql"))
@@ -409,6 +424,7 @@ class IntegrityVerifier:
         return result
 
     def _summary(self):
+        enrich_results(self.checks)
         declared = [item for item in self.checks if item["kind"] != "export"]
         required = set(self.contract.required_checks)
         required.update(item["id"] for item in declared if item.get("required"))
@@ -432,9 +448,13 @@ class IntegrityVerifier:
             limitations.add("NO_DECLARED_CHECKS")
         if not required:
             limitations.add("NO_REQUIRED_CHECKS")
-        return {"checks": self.checks, "coverage": {"declared": len(declared), "applicable": len(checked),
+        result = {"checks": self.checks, "coverage": {"declared": len(declared), "applicable": len(checked),
                 "checked": len(checked), "skipped": len(skipped), "required": sorted(required)},
                 "integrity_status": status, "source_integrity_status": source_status, **flags,
                 "limitations": sorted(limitations),
                 "publication_mode": None if failed else "VERIFIED_INTEGRITY" if status == "PASSED" else "UNVERIFIED_INTEGRITY",
                 "dataset_published": not failed}
+        result["integrity_message"] = summary_message(result)
+        if len(_json(result).encode("utf-8")) > MAX_METADATA:
+            raise AnonymizerError("CHECK_INCOMPLETE: превышен лимит диагностики проверки.")
+        return result

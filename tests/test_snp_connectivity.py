@@ -176,7 +176,7 @@ def test_all_optional_roles_and_short_uom_fields_are_checked_when_present(tmp_pa
 
 
 @pytest.mark.parametrize("missing", ["table", "column"])
-def test_missing_required_input_is_not_pass_and_only_diagnostics_are_published(tmp_path, missing):
+def test_missing_required_input_publishes_with_honest_partial_coverage(tmp_path, missing):
     rows = dataset()
     if missing == "table":
         del rows["mot"]
@@ -185,10 +185,10 @@ def test_missing_required_input_is_not_pass_and_only_diagnostics_are_published(t
             del row["prodsource"]
     source = write_dataset(tmp_path / "source", rows=rows)
     output = tmp_path / "out"
-    with pytest.raises(IntegrityError) as error:
-        run(options(tmp_path, source))
-    report = diagnostic(output, error.value)
+    report = run(options(tmp_path, source))
     assert report["integrity_status"] == "NOT_CHECKED"
+    assert report["dataset_published"] and report["publication_mode"] == "UNVERIFIED_INTEGRITY"
+    assert (output / "dump.sql").is_file() and (output / "inserts.sql").is_file()
     assert any(row["status"] == "NOT_CHECKED" and row.get("required") for row in report["checks"])
 
 

@@ -32,6 +32,7 @@ OPTIMIZER_RESOURCES = {
 class ContractError(AnonymizerError):
     def __init__(self, message="Некорректный или противоречивый профиль связности.", code="CONTRACT_CONFLICT"):
         self.code = code
+        self.detail = str(message)
         super().__init__(f"{code}: {message}")
 
 
@@ -270,6 +271,8 @@ def _state(store, sides):
         for member in side["members"]:
             if SYSTEM.intersection(member["columns"]):
                 return "NOT_CHECKED", "SYSTEM_FIELD_POLICY"
+    for side in sides:
+        for member in side["members"]:
             if not set(member["columns"]).issubset(_physical(store, member["table"])):
                 return "NOT_CHECKED", "RELATION_TARGET_MISSING"
     # PostgreSQL equality is typed; comparing SQLite strings must never make
@@ -561,8 +564,11 @@ def compile_contract(store, profile_spec=None, check=lambda: None):
                         field["_null_only"] = (field["type"] == "TEXT" and
                                                field["name"] in data.get("inferred_null_only_columns", ()))
                         bound.append((node, field))
-                kind, equality = _domain_type([f for _, f in bound], spec)
-                length, quantum, capacity, positive_capacity, negative_capacity = _encoding([f for _, f in bound], kind)
+                try:
+                    kind, equality = _domain_type([f for _, f in bound], spec)
+                    length, quantum, capacity, positive_capacity, negative_capacity = _encoding([f for _, f in bound], kind)
+                except ContractError as error:
+                    raise ContractError(f"Домен {spec['id']}: {error.detail}", error.code) from None
                 required_prefix = None
                 if strict_builtin and spec["id"] in {value[0] for value in OPTIMIZER_RESOURCES.values()}:
                     required_prefix = spec["prefix"]
@@ -572,6 +578,7 @@ def compile_contract(store, profile_spec=None, check=lambda: None):
                 required = "domain:" + spec["id"] in profile["required_checks"]
                 domain = {"id": ident, "domain_id": spec["id"], "namespace": namespace,
                           "members": [{"table": node[:2], "column": node[2]} for node, _ in bound],
+                          "_declared_members": [{"table": node[:2], "columns": [node[2]]} for node in nodes],
                           "kind": kind, "equality": equality, "prefix": spec["prefix"], "length": length,
                           "quantum": quantum, "capacity": capacity,
                           "positive_capacity": positive_capacity, "negative_capacity": negative_capacity,
@@ -657,6 +664,9 @@ def compile_contract(store, profile_spec=None, check=lambda: None):
                     item["required"] = True
                     if item["id"] not in contract.required_checks:
                         contract.required_checks.append(item["id"])
+    # Presentation metadata must not change the effective mapping contract.
+    from .integrity_diagnostics import annotate_contract
+    annotate_contract(store, contract, ns_labels, check=check)
     cost = len(_json({"domains": contract.domains, "relations": contract.relations, "keys": contract.keys}).encode("utf-8")) * 4
     cost += sum(1024 + sum(len(str(v)) * 4 for v in n) for n in contract.assignments)
     if cost + getattr(store, "_input_metadata_used", 0) + getattr(store, "_declaration_bytes", 0) > MAX_CONTRACT_BYTES:
